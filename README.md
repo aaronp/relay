@@ -63,7 +63,7 @@ make dev                                              # SpacetimeDB on 127.0.0.1
 spacetime publish -s local topics --module-path module -y
 spacetime call -s local topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:5173"]'
-make web                                              # then open http://127.0.0.1:5173 (not localhost)
+make ui                                               # then open http://127.0.0.1:5173 (not localhost)
 ```
 
 - **Authenticate with kerits** runs PKCE in the browser. The client id is the page origin,

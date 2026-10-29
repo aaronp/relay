@@ -62,7 +62,7 @@ implemented: module, `@topics/client`, `chat` CLI.
   set its `trustedIssuer` to the wallet server URL. The README documents this.
 - Settings and the refresh token persist in `localStorage`, so a page reload doesn't sign you out.
   This is acceptable for a local dev tool, and the README notes it.
-- There is a `make web` target to run it.
+- There is a `make ui` target to run it.
 - Tests are minimal:
   - a unit test for the browser auth helper (PKCE challenge, authorize URL, callback parsing / state check)
   - a unit test for the "can read / can write" check
