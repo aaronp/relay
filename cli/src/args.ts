@@ -29,3 +29,7 @@ export function parseTopicAddr(s: string): string {
   if (!parseAddress(s)) throw new Error(`invalid topic "${s}" (expected group.topic, lowercase a-z 0-9 _ -)`);
   return s;
 }
+
+/** C0/C1 control chars and DEL as \\xNN, so message text can't fake lines or send terminal escapes. */
+export const displayText = (text: string) =>
+  text.replace(/[\x00-\x1f\x7f-\x9f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);

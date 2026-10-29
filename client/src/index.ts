@@ -69,12 +69,19 @@ export class Client {
   #timer?: ReturnType<typeof setTimeout>;
   #watches = new Set<Watch>();
   #intentional = false;
+  #closedByUser = false;
+  /** Why calls can't run right now (between connections, or for good), else undefined. */
+  #dead?: string;
+  #kill!: (e: Error) => void;
+  /** Rejects when the current connection goes away; raced against every call so none hang. */
+  #gone!: Promise<never>;
   #settle!: (r: 'expired' | 'closed') => void;
   /** Resolves when the client stops for good: token expired without refresh, or close()/connection lost. */
   readonly closed = new Promise<'expired' | 'closed'>(r => (this.#settle = r));
 
   private constructor(public conn: DbConnection, opts: ConnectOptions, token: string) {
     this.#opts = opts;
+    this.#resetGone();
     this.#armExpiry(token);
   }
 
@@ -87,23 +94,23 @@ export class Client {
   }
 
   createGroup(name: string, opts: { createTopicPolicies: string[] }): Promise<void> {
-    return this.conn.reducers.createGroup({ name, createTopicPolicies: opts.createTopicPolicies });
+    return this.#call(() => this.conn.reducers.createGroup({ name, createTopicPolicies: opts.createTopicPolicies }));
   }
 
   createTopic(
     addr: string,
     opts: { readPolicies: string[]; writePolicies: string[]; lifetimeSecs?: number }
   ): Promise<void> {
-    return this.conn.reducers.createTopic({
+    return this.#call(() => this.conn.reducers.createTopic({
       address: addr,
       readPolicies: opts.readPolicies,
       writePolicies: opts.writePolicies,
       lifetimeSecs: opts.lifetimeSecs === undefined ? undefined : BigInt(opts.lifetimeSecs),
-    });
+    }));
   }
 
   send(addr: string, payload: Uint8Array): Promise<void> {
-    return this.conn.reducers.send({ address: addr, payload });
+    return this.#call(() => this.conn.reducers.send({ address: addr, payload }));
   }
 
   async listTopics(group: string): Promise<TopicInfo[]> {
@@ -143,10 +150,29 @@ export class Client {
   }
 
   close() {
+    this.#closedByUser = true;
     this.#intentional = true;
     clearTimeout(this.#timer);
+    this.#fail('connection closed');
     this.conn.disconnect();
     this.#settle('closed');
+  }
+
+  #resetGone() {
+    this.#dead = undefined;
+    this.#gone = new Promise<never>((_, reject) => (this.#kill = reject));
+    this.#gone.catch(() => {});
+  }
+
+  #fail(reason: string) {
+    this.#dead = reason;
+    this.#kill(new Error(reason));
+  }
+
+  /** Runs fn on the live connection; rejects (never hangs) if that connection goes away first. */
+  #call<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.#dead) return Promise.reject(new Error(this.#dead));
+    return Promise.race([fn(), this.#gone]);
   }
 
   async #subscribeWatch(w: Watch) {
@@ -170,12 +196,12 @@ export class Client {
 
   /** Subscribe, read the applied rows, unsubscribe. */
   #snapshot<T>(sql: string, read: () => T): Promise<T> {
-    return new Promise((resolve, reject) => {
+    return this.#call(() => new Promise((resolve, reject) => {
       const handle = this.conn.subscriptionBuilder()
         .onApplied(() => { const rows = read(); handle.unsubscribe(); resolve(rows); })
         .onError(ctx => reject(ctx.event ?? new Error('subscription failed')))
         .subscribe(sql);
-    });
+    }));
   }
 
   #armExpiry(token: string) {
@@ -185,15 +211,21 @@ export class Client {
 
   async #expire() {
     this.#intentional = true;
+    this.#fail('token expired');
     for (const w of this.#watches) w.stop?.();
     this.conn.disconnect();
     const token = await this.#opts.onExpired?.().catch(() => undefined);
+    if (this.#closedByUser) return;
     if (!token) return this.#settle('expired');
+    let conn: DbConnection;
     try {
-      this.conn = await open(this.#opts, token, () => this.#lost());
+      conn = await open(this.#opts, token, () => this.#lost());
     } catch {
       return this.#settle('expired');
     }
+    if (this.#closedByUser) return conn.disconnect(); // close() was called while we were refreshing
+    this.conn = conn;
+    this.#resetGone();
     this.#intentional = false;
     this.#armExpiry(token);
     for (const w of this.#watches) void this.#subscribeWatch(w);
@@ -202,6 +234,7 @@ export class Client {
   #lost() {
     if (this.#intentional) return;
     clearTimeout(this.#timer);
+    this.#fail('connection closed');
     this.#settle('closed');
   }
 }

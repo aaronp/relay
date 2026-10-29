@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'node:util';
 import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@topics/client';
-import { parseLifetime, parsePermissions, parseTopicAddr } from './args';
+import { displayText, parseLifetime, parsePermissions, parseTopicAddr } from './args';
 import { login, refresh } from './auth';
 import { loadConfig, saveConfig, type Config } from './config';
 
@@ -17,6 +17,7 @@ options: --server <ws(s)://...> --db <name> --issuer <url> --port <loopback port
 setLogLevel('warn'); // keep stdout clean for piping
 
 const EXPIRED = 'token expired — run "chat auth"';
+const MIN_VALIDITY_MS = 30_000; // don't start a command on a token that's about to lapse
 
 const { values: o, positionals: [cmd, sub] } = parseArgs({
   allowPositionals: true,
@@ -37,7 +38,7 @@ const need = (v: string | undefined, flag: string) => {
 
 /** A live token: stored/env token, refreshed if expired; otherwise tell the user to re-auth. */
 async function freshToken(cfg: Config): Promise<string> {
-  const valid = (t?: string) => { try { return !!t && decodeExp(t) * 1000 > Date.now(); } catch { return false; } };
+  const valid = (t?: string) => { try { return !!t && decodeExp(t) * 1000 - Date.now() > MIN_VALIDITY_MS; } catch { return false; } };
   if (valid(cfg.token)) return cfg.token!;
   if (!cfg.token && !cfg.refreshToken) throw new Error('not signed in — run "chat auth"');
   const r = cfg.tokenFromEnv ? undefined : await refresh(cfg);
@@ -68,7 +69,7 @@ function printMessage(e: Envelope, json?: boolean) {
     return;
   }
   let text: string;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(e.payload); } catch { text = `base64:${b64}`; }
+  try { text = displayText(new TextDecoder('utf-8', { fatal: true }).decode(e.payload)); } catch { text = `base64:${b64}`; }
   console.log(`${e.sentAt.toISOString()} ${e.sender} ${text}`);
 }
 

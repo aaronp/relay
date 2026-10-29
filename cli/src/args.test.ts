@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { parseLifetime, parsePermissions, parseTopicAddr } from './args';
+import { displayText, parseLifetime, parsePermissions, parseTopicAddr } from './args';
 
 test('parsePermissions single and array', () =>
   expect(parsePermissions('{"read-policy":"XYZ","write-policy":["HKI","Q"]}', ['read-policy', 'write-policy']))
@@ -22,4 +22,10 @@ test('parseLifetime', () => {
 test('parseTopicAddr', () => {
   expect(parseTopicAddr('example.foo')).toBe('example.foo');
   expect(() => parseTopicAddr('example')).toThrow();
+});
+
+test('displayText escapes control chars so senders cannot forge lines or drive the terminal', () => {
+  expect(displayText('hi\n2026 bob fake')).toBe('hi\\x0a2026 bob fake');
+  expect(displayText('\x1b]52;c;evil\x07')).toBe('\\x1b]52;c;evil\\x07');
+  expect(displayText('héllo ✓')).toBe('héllo ✓');
 });

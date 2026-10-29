@@ -29,7 +29,7 @@ spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server e
 spacetime publish -s local topics --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local topics set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs
+spacetime call -s local topics set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
 
 export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=topics
 export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
@@ -46,7 +46,10 @@ chat pull --topic example.foo --watch
 The dev issuer generates a new key every time it starts, but SpacetimeDB caches JWKS per issuer URL. After
 restarting the issuer, either use a new `PORT=` or restart SpacetimeDB.
 
-`set_config` can only be called by the identity that published the module.
+`set_config` can only be called by the identity that published the module. Its last argument is the list of
+accepted token audiences. kerits sets `aud` to the client origin, e.g. `http://127.0.0.1:7863` for the CLI.
+**Set it in production.** An empty list accepts any audience, which means a token kerits issued to any other
+app would work here too.
 
 ## Tests
 
@@ -59,7 +62,8 @@ bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 m
 
 ```sh
 spacetime publish -s maincloud topics --module-path module -y
-spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs
+spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+  '["http://127.0.0.1:7863", "https://<your web app origin>"]'
 ```
 
 Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topics --issuer https://oauth.kerits.id`).
@@ -69,7 +73,7 @@ Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topic
 `chat auth` runs auth-code + PKCE (S256) against the issuer and receives the code on a **fixed** loopback port
 (default `7863`; `--port` / `TOPICS_AUTH_PORT`). kerits treats `http://127.0.0.1:<port>` as the client id,
 so a different port is a different client and old refresh tokens stop working. Tokens are stored in
-`~/.config/topics-chat/config.json` (mode 0600). Expired tokens are refreshed automatically when a
+`~/.config/topics-chat/config.json` (mode 0600). A token with less than 30s left counts as expired. Expired tokens are refreshed automatically when a
 refresh token exists; `pull --watch` reconnects on refresh. `TOPICS_TOKEN` overrides the stored token
 and is never refreshed.
 
@@ -95,8 +99,10 @@ const stop = client.watch('example.foo', env => console.log(env.sender, env.payl
 console.log(await client.closed);            // 'expired' | 'closed'
 ```
 
-The library passes the JWT directly on the websocket URL. It does not use the SDK's token exchange,
-because that exchange rewrites `exp` and the module needs the real expiry.
+The library sends the JWT directly, not through the SDK's token exchange, because that exchange rewrites
+`exp` and the module needs the real expiry. In Bun and Node (22 or later, which have a global WebSocket)
+it goes in an `Authorization` header. Browsers can't set websocket headers, so there it goes in `?token=`
+on the URL, where proxies may log it.
 
 ## Known issues
 

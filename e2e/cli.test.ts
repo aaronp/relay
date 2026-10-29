@@ -50,3 +50,9 @@ test('expired token message', async () => {
   expect(r.code).toBe(1);
   expect(r.stderr).toContain('token expired — run "chat auth"');
 });
+
+test('token about to expire counts as expired (no refresh available)', async () => {
+  const r = await chat(await env.tokenFor('soon', [], 10), 'topic', 'list', '--group', 'example');
+  expect(r.code).toBe(1);
+  expect(r.stderr).toContain('token expired — run "chat auth"');
+});
