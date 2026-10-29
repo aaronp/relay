@@ -1,0 +1,19 @@
+{
+  "name": "topics-module",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "spacetime build",
+    "publish": "spacetime publish"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "spacetimedb": "2.12.*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  }
+}
