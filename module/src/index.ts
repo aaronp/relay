@@ -1,10 +1,11 @@
 import { schema, table, t, SenderError, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
-import { Timestamp } from 'spacetimedb';
+import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
 import { missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
 
 const MAX_PAYLOAD = 65536;
+const SWEEP_MICROS = 15_000_000n;
 
 const config = table(
   { name: 'config' },
@@ -67,7 +68,15 @@ const message = table(
   }
 );
 
-const spacetimedb = schema({ config, session, group, topic, message });
+const sweepTimer = table(
+  { name: 'sweep_timer' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+  }
+);
+
+const spacetimedb = schema({ config, session, group, topic, message, sweepTimer });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
@@ -110,6 +119,19 @@ export const init = spacetimedb.init(ctx => {
     createGroupPolicy: '',
     policyClaim: 'kerits.policySAIDs',
   });
+  ctx.db.sweepTimer.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(SWEEP_MICROS) });
+});
+
+/** Drops expired sessions (cutting their reads) and expired topics with their messages. */
+export const sweep = spacetimedb.reducer({ onSchedule: sweepTimer }, { timer: sweepTimer.rowType }, ctx => {
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  for (const s of [...ctx.db.session.iter()])
+    if (s.expiresAt.microsSinceUnixEpoch <= now) ctx.db.session.identity.delete(s.identity);
+  for (const tp of [...ctx.db.topic.iter()]) {
+    if (!tp.expiresAt || tp.expiresAt.microsSinceUnixEpoch > now) continue;
+    for (const m of [...ctx.db.message.topicId.filter(tp.id)]) ctx.db.message.id.delete(m.id);
+    ctx.db.topic.id.delete(tp.id);
+  }
 });
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
@@ -194,4 +216,19 @@ export const mySession = spacetimedb.view(
   { name: 'my_session', public: true },
   t.option(session.rowType),
   ctx => ctx.db.session.identity.find(ctx.sender) ?? undefined
+);
+
+// 2.12 TS views take no parameters, so this returns every readable message; clients filter by topic_id.
+// ponytail: recomputes over all topics/messages on every change. Fine for chat-sized data; switch to a
+// query-builder semijoin (or parameterised view when supported) if it gets large.
+export const myMessages = spacetimedb.view(
+  { name: 'my_messages', public: true },
+  t.array(message.rowType),
+  ctx => {
+    const s = ctx.db.session.identity.find(ctx.sender);
+    if (!s) return [];
+    return [...ctx.db.topic.iter()]
+      .filter(tp => tp.owner === s.subject || satisfies(s.policySaids, tp.readPolicies))
+      .flatMap(tp => [...ctx.db.message.topicId.filter(tp.id)]);
+  }
 );

@@ -39,6 +39,9 @@ export const Message = __t.object("Message", {
 });
 export type Message = __Infer<typeof Message>;
 
+export const MyMessages = __t.object("MyMessages", {});
+export type MyMessages = __Infer<typeof MyMessages>;
+
 export const MySession = __t.object("MySession", {});
 export type MySession = __Infer<typeof MySession>;
 
@@ -49,6 +52,12 @@ export const Session = __t.object("Session", {
   expiresAt: __t.timestamp(),
 });
 export type Session = __Infer<typeof Session>;
+
+export const SweepTimer = __t.object("SweepTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type SweepTimer = __Infer<typeof SweepTimer>;
 
 export const Topic = __t.object("Topic", {
   id: __t.u64(),

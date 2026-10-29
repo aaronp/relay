@@ -43,6 +43,7 @@ import SetConfigReducer from "./set_config_reducer";
 
 // Import all table schema definitions
 import GroupRow from "./group_table";
+import MyMessagesRow from "./my_messages_table";
 import MySessionRow from "./my_session_table";
 import TopicRow from "./topic_table";
 
@@ -79,6 +80,13 @@ const tablesSchema = __schema({
       { name: 'topic_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TopicRow),
+  myMessages: __table({
+    name: 'my_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyMessagesRow),
   mySession: __table({
     name: 'my_session',
     indexes: [

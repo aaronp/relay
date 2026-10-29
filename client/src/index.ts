@@ -1,9 +1,16 @@
 import { DbConnection } from './bindings';
+import { decodeExp } from './jwt';
 import { directTokenSocket } from './ws';
 
 export { decodeExp } from './jwt';
 
-export type ConnectOptions = { uri: string; db: string; token: string };
+export type ConnectOptions = {
+  uri: string;
+  db: string;
+  token: string;
+  /** Called when the token expires. Return a fresh token to reconnect (watches resume), or undefined to stop. */
+  onExpired?: () => Promise<string | undefined>;
+};
 
 export type TopicInfo = {
   address: string;
@@ -15,11 +22,67 @@ export type TopicInfo = {
   expiresAt?: Date;
 };
 
+export type Envelope = {
+  id: bigint;
+  group: string;
+  topic: string;
+  sentAt: Date;
+  sender: string;
+  digest: string;
+  payload: Uint8Array;
+};
+
+type MessageRow = {
+  id: bigint; topicId: bigint; group: string; topic: string;
+  sentAt: { microsSinceUnixEpoch: bigint }; sender: string; digest: string; payload: number[];
+};
+
+type Watch = { addr: string; onMessage: (e: Envelope) => void; seen: Set<bigint>; stop?: () => void };
+
 const sqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const toDate = (ts: { microsSinceUnixEpoch: bigint }) => new Date(Number(ts.microsSinceUnixEpoch / 1000n));
+const toEnvelope = (m: MessageRow): Envelope => ({
+  id: m.id, group: m.group, topic: m.topic, sentAt: toDate(m.sentAt),
+  sender: m.sender, digest: m.digest, payload: Uint8Array.from(m.payload),
+});
+
+/** Opens a connection; rejects with the server's reason (bad issuer, expired token, ...). */
+function open(opts: ConnectOptions, token: string, onLost: () => void): Promise<DbConnection> {
+  return new Promise((resolve, reject) => {
+    let connected = false;
+    DbConnection.builder()
+      .withUri(opts.uri)
+      .withDatabaseName(opts.db)
+      .withToken(token)
+      .withCompression('none')
+      .withWSFn(directTokenSocket)
+      .onConnect(conn => { connected = true; resolve(conn); })
+      .onConnectError((_ctx, err) => reject(err))
+      .onDisconnect((_ctx, err) => (connected ? onLost() : reject(err ?? new Error('disconnected'))))
+      .build();
+  });
+}
 
 export class Client {
-  constructor(readonly conn: DbConnection) {}
+  #opts: ConnectOptions;
+  #timer?: ReturnType<typeof setTimeout>;
+  #watches = new Set<Watch>();
+  #intentional = false;
+  #settle!: (r: 'expired' | 'closed') => void;
+  /** Resolves when the client stops for good: token expired without refresh, or close()/connection lost. */
+  readonly closed = new Promise<'expired' | 'closed'>(r => (this.#settle = r));
+
+  private constructor(public conn: DbConnection, opts: ConnectOptions, token: string) {
+    this.#opts = opts;
+    this.#armExpiry(token);
+  }
+
+  static async connect(opts: ConnectOptions): Promise<Client> {
+    let client: Client | undefined;
+    const conn = await open(opts, opts.token, () => client?.#lost());
+    client = new Client(conn, opts, opts.token);
+    return client;
+  }
 
   createGroup(name: string, opts: { createTopicPolicies: string[] }): Promise<void> {
     return this.conn.reducers.createGroup({ name, createTopicPolicies: opts.createTopicPolicies });
@@ -55,6 +118,54 @@ export class Client {
     }));
   }
 
+  /** Messages you're allowed to read, oldest first. Empty if the topic doesn't exist or you lack the read policy. */
+  // ponytail: paging is client-side over the subscribed set; add server-side paging if topics get large.
+  async pull(addr: string, opts: { afterId?: bigint; limit?: number } = {}): Promise<Envelope[]> {
+    const id = await this.#topicId(addr);
+    if (id === undefined) return [];
+    const rows = await this.#snapshot(`SELECT * FROM my_messages WHERE topic_id = ${id}`,
+      () => [...this.conn.db.myMessages.iter()].filter(m => m.topicId === id));
+    return rows
+      .filter(m => opts.afterId === undefined || m.id > opts.afterId)
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .slice(0, opts.limit)
+      .map(toEnvelope);
+  }
+
+  /** Existing messages first, then each new one. Survives token refresh. Returns an unsubscribe function. */
+  watch(addr: string, onMessage: (e: Envelope) => void): () => void {
+    const w: Watch = { addr, onMessage, seen: new Set() };
+    this.#watches.add(w);
+    void this.#subscribeWatch(w);
+    return () => { this.#watches.delete(w); w.stop?.(); };
+  }
+
+  close() {
+    this.#intentional = true;
+    clearTimeout(this.#timer);
+    this.conn.disconnect();
+    this.#settle('closed');
+  }
+
+  async #subscribeWatch(w: Watch) {
+    const id = await this.#topicId(w.addr);
+    if (id === undefined || !this.#watches.has(w)) return;
+    const conn = this.conn;
+    const onInsert = (_ctx: unknown, m: MessageRow) => {
+      if (m.topicId !== id || w.seen.has(m.id)) return;
+      w.seen.add(m.id);
+      w.onMessage(toEnvelope(m));
+    };
+    conn.db.myMessages.onInsert(onInsert);
+    const handle = conn.subscriptionBuilder().subscribe(`SELECT * FROM my_messages WHERE topic_id = ${id}`);
+    w.stop = () => { conn.db.myMessages.removeOnInsert(onInsert); if (handle.isActive()) handle.unsubscribe(); };
+  }
+
+  async #topicId(addr: string): Promise<bigint | undefined> {
+    return this.#snapshot(`SELECT * FROM topic WHERE address = ${sqlString(addr)}`,
+      () => [...this.conn.db.topic.iter()].find(t => t.address === addr)?.id);
+  }
+
   /** Subscribe, read the applied rows, unsubscribe. */
   #snapshot<T>(sql: string, read: () => T): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -65,23 +176,32 @@ export class Client {
     });
   }
 
-  close() {
+  #armExpiry(token: string) {
+    const ms = decodeExp(token) * 1000 - Date.now();
+    this.#timer = setTimeout(() => void this.#expire(), Math.max(0, Math.min(ms, 2 ** 31 - 1)));
+  }
+
+  async #expire() {
+    this.#intentional = true;
+    for (const w of this.#watches) w.stop?.();
     this.conn.disconnect();
+    const token = await this.#opts.onExpired?.().catch(() => undefined);
+    if (!token) return this.#settle('expired');
+    try {
+      this.conn = await open(this.#opts, token, () => this.#lost());
+    } catch {
+      return this.#settle('expired');
+    }
+    this.#intentional = false;
+    this.#armExpiry(token);
+    for (const w of this.#watches) void this.#subscribeWatch(w);
+  }
+
+  #lost() {
+    if (this.#intentional) return;
+    clearTimeout(this.#timer);
+    this.#settle('closed');
   }
 }
 
-/** Resolves once connected; rejects with the server's reason (bad issuer, expired token, ...). */
-export function connect(opts: ConnectOptions): Promise<Client> {
-  return new Promise((resolve, reject) => {
-    DbConnection.builder()
-      .withUri(opts.uri)
-      .withDatabaseName(opts.db)
-      .withToken(opts.token)
-      .withCompression('none')
-      .withWSFn(directTokenSocket)
-      .onConnect(conn => resolve(new Client(conn)))
-      .onConnectError((_ctx, err) => reject(err))
-      .onDisconnect((_ctx, err) => reject(err ?? new Error('disconnected')))
-      .build();
-  });
-}
+export const connect = (opts: ConnectOptions) => Client.connect(opts);
