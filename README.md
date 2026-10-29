@@ -10,6 +10,7 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 | `module/` | SpacetimeDB module (TypeScript) |
 | `client/` | `@topics/client`, browser + Bun library |
 | `cli/` | `chat` CLI |
+| `web/` | reference web UI (Vite + React), local only |
 | `dev-issuer/` | local ES256 issuer for tests and dev (never for production) |
 | `e2e/` | end-to-end tests against a local SpacetimeDB |
 
@@ -50,6 +51,31 @@ restarting the issuer, either use a new `PORT=` or restart SpacetimeDB.
 accepted token audiences. kerits sets `aud` to the client origin, e.g. `http://127.0.0.1:7863` for the CLI.
 **Set it in production.** An empty list accepts any audience, which means a token kerits issued to any other
 app would work here too.
+
+## Web UI
+
+A three-pane reference UI for developers: connection and token on the left, groups and topics in the middle,
+and the selected topic's messages, send box and live stream on the right. Every parameter is editable, and
+server errors are shown word for word.
+
+```sh
+make dev                                              # SpacetimeDB on 127.0.0.1:3010
+spacetime publish -s local topics --module-path module -y
+spacetime call -s local topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+  '["http://127.0.0.1:5173"]'
+make web                                              # then open http://127.0.0.1:5173 (not localhost)
+```
+
+- **Authenticate with kerits** runs PKCE in the browser. The client id is the page origin,
+  `http://127.0.0.1:5173`, and the redirect is `/callback` on that origin. Add that origin to
+  `allowedAudiences`, and set `trustedIssuer` to the wallet server URL you use.
+- Wallet servers other than kerits must allow CORS from `http://127.0.0.1:5173` on discovery and `/token`.
+  kerits already does.
+- The settings and tokens (including the refresh token) are kept in `localStorage`. That's fine for a local
+  dev tool, but don't host it like this.
+- SpacetimeDB URL and database changes apply when you click **Reconnect**.
+- The "can read / can write" badges compare your token's SAIDs with each topic's policies (owner always
+  passes). An empty Pull on a readable-looking topic just means no messages.
 
 ## Tests
 

@@ -8,7 +8,7 @@
     "web"
   ],
   "scripts": {
-    "test": "bun run build && bun test ./module ./dev-issuer ./client ./cli",
+    "test": "bun run build && bun test ./module ./dev-issuer ./client ./cli ./web",
     "test:e2e": "bun test --timeout 60000 ./e2e",
     "build": "bun run --cwd client build"
   }

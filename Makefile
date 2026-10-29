@@ -3,7 +3,7 @@ LISTEN ?= 127.0.0.1:3010
 SERVER ?= local
 DB     ?= topics
 
-.PHONY: dev dev-status build
+.PHONY: dev dev-status build web
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -24,3 +24,7 @@ dev-status:
 ## Build the standalone `chat` binary into dist/chat.
 build:
 	bun build cli/src/main.ts --compile --outfile dist/chat
+
+## Run the web reference UI at http://127.0.0.1:5173 (fixed origin = kerits client_id).
+web:
+	bun run --cwd web dev
