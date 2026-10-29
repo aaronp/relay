@@ -1,0 +1,6 @@
+{
+  "name": "@topics/web",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@topics/client": "workspace:*" }
+}

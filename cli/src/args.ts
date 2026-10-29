@@ -1,5 +1,7 @@
 import { parseAddress } from '../../module/src/policy';
 
+export { displayText, parseLifetime } from '@topics/client';
+
 /** `{"read-policy":"X","write-policy":["A","B"]}` -> { 'read-policy': ['X'], 'write-policy': ['A','B'] } */
 export function parsePermissions(json: string, keys: string[]): Record<string, string[]> {
   let obj: unknown;
@@ -16,20 +18,7 @@ export function parsePermissions(json: string, keys: string[]): Record<string, s
   return out;
 }
 
-const UNITS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
-
-/** `30s|15m|12h|7d` -> seconds */
-export function parseLifetime(s: string): number {
-  const m = /^(\d+)([smhd])$/.exec(s);
-  if (!m) throw new Error(`invalid lifetime "${s}" (use e.g. 30s, 15m, 12h, 7d)`);
-  return Number(m[1]) * UNITS[m[2]];
-}
-
 export function parseTopicAddr(s: string): string {
   if (!parseAddress(s)) throw new Error(`invalid topic "${s}" (expected group.topic, lowercase a-z 0-9 _ -)`);
   return s;
 }
-
-/** C0/C1 control chars and DEL as \\xNN, so message text can't fake lines or send terminal escapes. */
-export const displayText = (text: string) =>
-  text.replace(/[\x00-\x1f\x7f-\x9f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);

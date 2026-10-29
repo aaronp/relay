@@ -4,6 +4,7 @@ import { directTokenSocket } from './ws';
 
 export { decodeClaims, decodeExp } from './jwt';
 export * from './oauth';
+export { displayText, parseLifetime, topicAccess } from './access';
 export { setGlobalLogLevel as setLogLevel } from 'spacetimedb';
 
 export type ConnectOptions = {

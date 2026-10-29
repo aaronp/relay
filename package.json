@@ -4,7 +4,8 @@
   "workspaces": [
     "client",
     "cli",
-    "dev-issuer"
+    "dev-issuer",
+    "web"
   ],
   "scripts": {
     "test": "bun run build && bun test ./module ./dev-issuer ./client ./cli",

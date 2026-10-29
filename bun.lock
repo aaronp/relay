@@ -27,6 +27,12 @@
     "dev-issuer": {
       "name": "@topics/dev-issuer",
     },
+    "web": {
+      "name": "@topics/web",
+      "dependencies": {
+        "@topics/client": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@topics/cli": ["@topics/cli@workspace:cli"],
@@ -34,6 +40,8 @@
     "@topics/client": ["@topics/client@workspace:client"],
 
     "@topics/dev-issuer": ["@topics/dev-issuer@workspace:dev-issuer"],
+
+    "@topics/web": ["@topics/web@workspace:web"],
 
     "base64-js": ["base64-js@1.5.1", "", {}, "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA=="],
 
