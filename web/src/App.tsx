@@ -3,7 +3,9 @@ import { connect, decodeClaims, type Client, type TopicInfo, type Tokens } from 
 import { ConnectionPane, type Claims } from './ConnectionPane';
 import { TopicPane } from './TopicPane';
 import { TopicsPane } from './TopicsPane';
-import { completeLogin, loadSettings, loadTokens, refresh, saveSettings, saveTokens, type Settings } from './session';
+import {
+  completeLogin, loadSettings, loadTokens, refresh, saveSettings, saveTokens, usableTokens, type Settings,
+} from './session';
 
 // StrictMode runs effects twice in dev; the callback (and its one-shot PKCE state) must be handled once.
 let callbackHandled = false;
@@ -18,6 +20,8 @@ export function App() {
   const [client, setClient] = useState<Client | null>(null);
   const [connection, setConnection] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected');
   const [notice, setNotice] = useState<string>();
+  // Kept apart from `notice` so a connect that succeeds with the old token can't erase a failed sign-in.
+  const [authError, setAuthError] = useState<string>();
   const [session, setSession] = useState(0); // bump to (re)connect
   const [group, setGroup] = useState('');
   const [topics, setTopics] = useState<TopicInfo[]>([]);
@@ -31,8 +35,8 @@ export function App() {
     if (window.location.pathname !== '/callback' || callbackHandled) return;
     callbackHandled = true;
     completeLogin(window.location.href)
-      .then(t => { setNotice(undefined); setTokens(t); setSession(n => n + 1); })
-      .catch(e => setNotice(`sign-in failed: ${e instanceof Error ? e.message : e}`));
+      .then(t => { setAuthError(undefined); setTokens(t); setSession(n => n + 1); })
+      .catch(e => setAuthError(`sign-in failed: ${e instanceof Error ? e.message : e}`));
   }, []);
 
   useEffect(() => {
@@ -40,17 +44,37 @@ export function App() {
     if (!t) return;
     let cancelled = false;
     let c: Client | undefined;
+    let refreshError: string | undefined;
     setConnection('connecting');
-    connect({
-      uri: settings.server,
-      db: settings.db,
-      token: t.token,
-      onExpired: async () => {
-        const next = await refresh(settingsRef.current, tokensRef.current);
-        if (next && !cancelled) setTokens(next);
-        return next?.token;
-      },
-    }).then(conn => {
+    const signedOut = (why: string) => {
+      saveTokens(null);
+      setTokens(null);
+      setNotice(`signed out — ${why}`);
+    };
+    usableTokens(settingsRef.current, t).then(tok => {
+      if (cancelled) return;
+      if (tok !== t) setTokens(tok);
+      return connect({
+        uri: settings.server,
+        db: settings.db,
+        token: tok.token,
+        onExpired: async () => {
+          const r = await refresh(settingsRef.current, tokensRef.current);
+          if ('error' in r) { refreshError = r.error; return undefined; }
+          setTokens(r.tokens);
+          return r.tokens.token;
+        },
+      }).then(onConnected);
+    }, e => {
+      if (cancelled) return;
+      setConnection('disconnected');
+      signedOut(e instanceof Error ? e.message : String(e));
+    }).catch(e => {
+      if (cancelled) return;
+      setConnection('disconnected');
+      setNotice(`connect failed: ${e instanceof Error ? e.message : e}`);
+    });
+    function onConnected(conn: Client) {
       if (cancelled) return conn.close();
       c = conn;
       setClient(conn);
@@ -61,18 +85,12 @@ export function App() {
         setClient(null);
         setConnection('disconnected');
         if (why === 'expired') {
-          saveTokens(null);
-          setTokens(null);
-          setNotice('signed out — token expired');
+          signedOut(`token expired${refreshError ? ` (refresh failed: ${refreshError})` : ''}`);
         } else {
           setNotice('connection closed — click Reconnect');
         }
       });
-    }, e => {
-      if (cancelled) return;
-      setConnection('disconnected');
-      setNotice(`connect failed: ${e instanceof Error ? e.message : e}`);
-    });
+    }
     return () => { cancelled = true; c?.close(); setClient(null); };
     // settings changes apply on Reconnect, not on every keystroke
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,9 +103,11 @@ export function App() {
         onSettings={s => { setSettings(s); saveSettings(s); }}
         claims={claimsOf(tokens)}
         connection={connection}
-        notice={notice}
-        onReconnect={() => setSession(n => n + 1)}
-        onSignOut={() => { saveTokens(null); setTokens(null); setSession(n => n + 1); setNotice(undefined); }}
+        notice={[authError, notice].filter(Boolean).join('\n') || undefined}
+        onReconnect={() => { setAuthError(undefined); setSession(n => n + 1); }}
+        onSignOut={() => {
+          saveTokens(null); setTokens(null); setSession(n => n + 1); setNotice(undefined); setAuthError(undefined);
+        }}
       />
       <TopicsPane
         client={client}
@@ -99,7 +119,8 @@ export function App() {
         selected={selected?.address}
         onSelect={setSelected}
       />
-      <TopicPane client={client} topic={selected} />
+      {/* key: per-topic state (messages, late Pull results, statuses) never leaks into another topic */}
+      <TopicPane key={selected?.address} client={client} topic={selected} />
     </main>
   );
 }

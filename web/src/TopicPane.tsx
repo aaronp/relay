@@ -13,12 +13,11 @@ export function TopicPane({ client, topic }: Props) {
   const pull = useAction();
   const send = useAction();
 
-  // Turn the stream off when the topic or connection changes.
+  // Turn the stream off when the connection changes (a topic change remounts this pane).
   useEffect(() => {
-    setMessages([]);
     setStreaming(false);
     setStreamError(undefined);
-  }, [topic?.address, client]);
+  }, [client]);
 
   useEffect(() => {
     if (!streaming || !client || !topic) return;
