@@ -2,7 +2,8 @@ import { DbConnection } from './bindings';
 import { decodeExp } from './jwt';
 import { directTokenSocket } from './ws';
 
-export { decodeExp } from './jwt';
+export { decodeClaims, decodeExp } from './jwt';
+export * from './oauth';
 export { setGlobalLogLevel as setLogLevel } from 'spacetimedb';
 
 export type ConnectOptions = {
