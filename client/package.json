@@ -3,7 +3,25 @@
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && bun build src/index.ts --outdir dist --target browser --format esm --external spacetimedb && tsc -p tsconfig.json"
+  },
   "dependencies": {
     "spacetimedb": "2.12.*"
-  }
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  },
+  "types": "src/index.ts"
 }

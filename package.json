@@ -1,9 +1,13 @@
 {
   "name": "topics",
   "private": true,
-  "workspaces": ["client", "dev-issuer"],
+  "workspaces": [
+    "client",
+    "dev-issuer"
+  ],
   "scripts": {
-    "test": "bun test module dev-issuer client cli",
-    "test:e2e": "bun test e2e"
+    "test": "bun run build && bun test module dev-issuer client cli",
+    "test:e2e": "bun test e2e",
+    "build": "bun run --cwd client build"
   }
 }

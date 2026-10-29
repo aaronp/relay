@@ -34,7 +34,7 @@ export type Envelope = {
 
 type MessageRow = {
   id: bigint; topicId: bigint; group: string; topic: string;
-  sentAt: { microsSinceUnixEpoch: bigint }; sender: string; digest: string; payload: number[];
+  sentAt: { microsSinceUnixEpoch: bigint }; sender: string; digest: string; payload: Uint8Array;
 };
 
 type Watch = { addr: string; onMessage: (e: Envelope) => void; seen: Set<bigint>; stop?: () => void };
@@ -78,9 +78,10 @@ export class Client {
   }
 
   static async connect(opts: ConnectOptions): Promise<Client> {
-    let client: Client | undefined;
-    const conn = await open(opts, opts.token, () => client?.#lost());
-    client = new Client(conn, opts, opts.token);
+    let lost = () => {};
+    const conn = await open(opts, opts.token, () => lost());
+    const client = new Client(conn, opts, opts.token);
+    lost = () => client.#lost();
     return client;
   }
 
@@ -101,7 +102,7 @@ export class Client {
   }
 
   send(addr: string, payload: Uint8Array): Promise<void> {
-    return this.conn.reducers.send({ address: addr, payload: Array.from(payload) });
+    return this.conn.reducers.send({ address: addr, payload });
   }
 
   async listTopics(group: string): Promise<TopicInfo[]> {
