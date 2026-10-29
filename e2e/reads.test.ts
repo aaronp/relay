@@ -99,3 +99,14 @@ test('topic lifetime deletes topic and messages', async () => {
 test('send after topic expiry', async () => {
   await expect(writer.send('g.short', enc('x'))).rejects.toThrow('no such topic g.short');
 });
+
+test('pull on an unknown topic rejects', async () => {
+  await expect((await as('reader2', ['R'])).pull('g.nope')).rejects.toThrow('no such topic g.nope');
+});
+
+test('watch on an unknown topic reports an error', async () => {
+  const errs: Error[] = [];
+  (await as('reader3', ['R'])).watch('g.nope', () => {}, e => errs.push(e));
+  expect(await until(() => errs.length === 1, 3000)).toBe(true);
+  expect(errs[0].message).toBe('no such topic g.nope');
+});

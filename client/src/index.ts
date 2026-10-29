@@ -38,7 +38,10 @@ type MessageRow = {
   sentAt: { microsSinceUnixEpoch: bigint }; sender: string; digest: string; payload: Uint8Array;
 };
 
-type Watch = { addr: string; onMessage: (e: Envelope) => void; seen: Set<bigint>; stop?: () => void };
+type Watch = {
+  addr: string; onMessage: (e: Envelope) => void; onError?: (err: Error) => void;
+  seen: Set<bigint>; stop?: () => void;
+};
 
 const sqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const toDate = (ts: { microsSinceUnixEpoch: bigint }) => new Date(Number(ts.microsSinceUnixEpoch / 1000n));
@@ -127,11 +130,10 @@ export class Client {
     }));
   }
 
-  /** Messages you're allowed to read, oldest first. Empty if the topic doesn't exist or you lack the read policy. */
+  /** Messages you're allowed to read, oldest first. Rejects if the topic doesn't exist; empty if you lack the read policy. */
   // ponytail: paging is client-side over the subscribed set; add server-side paging if topics get large.
   async pull(addr: string, opts: { afterId?: bigint; limit?: number } = {}): Promise<Envelope[]> {
-    const id = await this.#topicId(addr);
-    if (id === undefined) return [];
+    const id = await this.#requireTopicId(addr);
     const rows = await this.#snapshot(`SELECT * FROM my_messages WHERE topic_id = ${id}`,
       () => [...this.conn.db.myMessages.iter()].filter(m => m.topicId === id));
     return rows
@@ -141,9 +143,12 @@ export class Client {
       .map(toEnvelope);
   }
 
-  /** Existing messages first, then each new one. Survives token refresh. Returns an unsubscribe function. */
-  watch(addr: string, onMessage: (e: Envelope) => void): () => void {
-    const w: Watch = { addr, onMessage, seen: new Set() };
+  /**
+   * Existing messages first, then each new one. Survives token refresh. Returns an unsubscribe function.
+   * onError: unknown topic or failed subscription (the watch stops).
+   */
+  watch(addr: string, onMessage: (e: Envelope) => void, onError?: (err: Error) => void): () => void {
+    const w: Watch = { addr, onMessage, onError, seen: new Set() };
     this.#watches.add(w);
     void this.#subscribeWatch(w);
     return () => { this.#watches.delete(w); w.stop?.(); };
@@ -176,8 +181,14 @@ export class Client {
   }
 
   async #subscribeWatch(w: Watch) {
-    const id = await this.#topicId(w.addr);
-    if (id === undefined || !this.#watches.has(w)) return;
+    const fail = (e: unknown) => {
+      if (!this.#watches.delete(w)) return;
+      w.stop?.();
+      w.onError?.(e instanceof Error ? e : new Error(String(e)));
+    };
+    let id: bigint;
+    try { id = await this.#requireTopicId(w.addr); } catch (e) { return fail(e); }
+    if (!this.#watches.has(w)) return;
     const conn = this.conn;
     const onInsert = (_ctx: unknown, m: MessageRow) => {
       if (m.topicId !== id || w.seen.has(m.id)) return;
@@ -185,13 +196,17 @@ export class Client {
       w.onMessage(toEnvelope(m));
     };
     conn.db.myMessages.onInsert(onInsert);
-    const handle = conn.subscriptionBuilder().subscribe(`SELECT * FROM my_messages WHERE topic_id = ${id}`);
+    const handle = conn.subscriptionBuilder()
+      .onError(ctx => fail(ctx.event ?? new Error('subscription failed')))
+      .subscribe(`SELECT * FROM my_messages WHERE topic_id = ${id}`);
     w.stop = () => { conn.db.myMessages.removeOnInsert(onInsert); if (handle.isActive()) handle.unsubscribe(); };
   }
 
-  async #topicId(addr: string): Promise<bigint | undefined> {
-    return this.#snapshot(`SELECT * FROM topic WHERE address = ${sqlString(addr)}`,
+  async #requireTopicId(addr: string): Promise<bigint> {
+    const id = await this.#snapshot(`SELECT * FROM topic WHERE address = ${sqlString(addr)}`,
       () => [...this.conn.db.topic.iter()].find(t => t.address === addr)?.id);
+    if (id === undefined) throw new Error(`no such topic ${addr}`);
+    return id;
   }
 
   /** Subscribe, read the applied rows, unsubscribe. */
