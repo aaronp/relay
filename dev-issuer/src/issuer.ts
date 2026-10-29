@@ -4,7 +4,7 @@ const b64url = (b: Uint8Array | string) =>
   btoa(typeof b === 'string' ? b : String.fromCharCode(...b))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-export type MintClaims = { sub: string; saids: string[]; ttlSec: number; claimKey?: string };
+export type MintClaims = { sub: string; saids: string[]; ttlSec: number; claimKey?: string; aud?: string };
 
 export async function startDevIssuer(opts: { port: number }) {
   const issuer = `http://127.0.0.1:${opts.port}`;
@@ -46,7 +46,7 @@ export async function startDevIssuer(opts: { port: number }) {
     const iat = Math.floor(Date.now() / 1000);
     const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid }));
     const payload = b64url(JSON.stringify({
-      iss: issuer, sub: c.sub, aud: 'topics-dev', iat, exp: iat + c.ttlSec,
+      iss: issuer, sub: c.sub, aud: c.aud ?? 'topics-dev', iat, exp: iat + c.ttlSec,
       [c.claimKey ?? 'kerits.policySAIDs']: c.saids,
     }));
     // WebCrypto ECDSA signatures are already raw r||s, which is what JWS ES256 wants.

@@ -37,3 +37,8 @@ test('token from untrusted issuer is rejected', async () => {
     other.stop();
   }
 });
+
+test('token minted for another audience is rejected', async () => {
+  const token = await env.issuer.mint({ sub: 'alice', saids: ['ONBOARDED'], ttlSec: 3600, aud: 'https://evil.example' });
+  await expect(connect({ uri: env.uri, db: env.db, token })).rejects.toThrow();
+});

@@ -14,4 +14,5 @@ export default {
   trustedIssuer: __t.string(),
   createGroupPolicy: __t.string(),
   policyClaim: __t.string(),
+  allowedAudiences: __t.array(__t.string()),
 };

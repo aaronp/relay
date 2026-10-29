@@ -2,7 +2,7 @@ import { schema, table, t, SenderError, type InferSchema, type ReducerCtx } from
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
-import { missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
+import { audienceAllowed, missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
 
 const MAX_PAYLOAD = 65536;
 const SWEEP_MICROS = 15_000_000n;
@@ -15,6 +15,7 @@ const config = table(
     trustedIssuer: t.string(),
     createGroupPolicy: t.string(),
     policyClaim: t.string(),
+    allowedAudiences: t.array(t.string()),
   }
 );
 
@@ -89,6 +90,9 @@ function callerClaims(ctx: Ctx) {
   if (!jwt) throw new SenderError('a JWT is required');
   const cfg = getConfig(ctx);
   if (jwt.issuer !== cfg.trustedIssuer) throw new SenderError(`untrusted issuer ${jwt.issuer}`);
+  // Without this, a token kerits issued to any other app (same sub + SAIDs) would work here.
+  if (!audienceAllowed(jwt.audience, cfg.allowedAudiences))
+    throw new SenderError(`token audience [${jwt.audience.join(', ')}] not accepted`);
   const exp = jwt.fullPayload.exp;
   if (typeof exp !== 'number') throw new SenderError('token has no exp');
   const expiresAt = new Timestamp(BigInt(exp) * 1_000_000n);
@@ -118,6 +122,7 @@ export const init = spacetimedb.init(ctx => {
     trustedIssuer: 'https://oauth.kerits.id',
     createGroupPolicy: '',
     policyClaim: 'kerits.policySAIDs',
+    allowedAudiences: [],
   });
   ctx.db.sweepTimer.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(SWEEP_MICROS) });
 });
@@ -143,7 +148,12 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
 });
 
 export const setConfig = spacetimedb.reducer(
-  { trustedIssuer: t.string(), createGroupPolicy: t.string(), policyClaim: t.string() },
+  {
+    trustedIssuer: t.string(),
+    createGroupPolicy: t.string(),
+    policyClaim: t.string(),
+    allowedAudiences: t.array(t.string()),
+  },
   (ctx, args) => {
     const cfg = getConfig(ctx);
     if (!ctx.sender.isEqual(cfg.admin)) throw new SenderError('admin only');

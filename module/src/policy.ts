@@ -26,3 +26,7 @@ export function parseAddress(addr: string): { group: string; topic: string } | n
 
 export const missingMessage = (action: string, required: string[]) =>
   required.length ? `${action} requires one of [${required.join(', ')}]` : `${action} is not permitted`;
+
+/** Empty allow-list accepts any audience (dev); otherwise the token must name one of them. */
+export const audienceAllowed = (aud: readonly string[], allowed: string[]) =>
+  allowed.length === 0 || aud.some(a => allowed.includes(a));

@@ -16,6 +16,7 @@ export const Config = __t.object("Config", {
   trustedIssuer: __t.string(),
   createGroupPolicy: __t.string(),
   policyClaim: __t.string(),
+  allowedAudiences: __t.array(__t.string()),
 });
 export type Config = __Infer<typeof Config>;
 

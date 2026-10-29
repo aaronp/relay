@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
+import { audienceAllowed, missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
 
 test('readPolicySaids flat key', () =>
   expect(readPolicySaids({ 'kerits.policySAIDs': ['A', 'B'] }, 'kerits.policySAIDs')).toEqual(['A', 'B']));
@@ -33,4 +33,11 @@ test('parseAddress', () => {
 test('missingMessage', () => {
   expect(missingMessage('send', ['W', 'X'])).toBe('send requires one of [W, X]');
   expect(missingMessage('send', [])).toBe('send is not permitted');
+});
+
+test('audienceAllowed', () => {
+  expect(audienceAllowed(['topics-cli'], [])).toBe(true); // empty allow-list = any (dev)
+  expect(audienceAllowed(['topics-cli'], ['topics-cli', 'https://web'])).toBe(true);
+  expect(audienceAllowed(['https://evil.example'], ['topics-cli'])).toBe(false);
+  expect(audienceAllowed([], ['topics-cli'])).toBe(false);
 });

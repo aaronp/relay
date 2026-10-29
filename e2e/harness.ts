@@ -24,7 +24,7 @@ export async function setup() {
     iss.stop();
     throw new Error(`could not publish to SpacetimeDB "${SERVER}" — is \`spacetime start\` running?\n${e}`);
   }
-  run(['call', '-s', SERVER, db, 'set_config', iss.issuer, 'ONBOARDED', 'kerits.policySAIDs']);
+  run(['call', '-s', SERVER, db, 'set_config', iss.issuer, 'ONBOARDED', 'kerits.policySAIDs', '["topics-dev"]']);
   return {
     uri: URI,
     db,
