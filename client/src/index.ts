@@ -3,6 +3,7 @@ import { decodeExp } from './jwt';
 import { directTokenSocket } from './ws';
 
 export { decodeExp } from './jwt';
+export { setGlobalLogLevel as setLogLevel } from 'spacetimedb';
 
 export type ConnectOptions = {
   uri: string;

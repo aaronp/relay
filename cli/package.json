@@ -1,0 +1,7 @@
+{
+  "name": "@topics/cli",
+  "private": true,
+  "type": "module",
+  "bin": { "chat": "src/main.ts" },
+  "dependencies": { "@topics/client": "workspace:*" }
+}

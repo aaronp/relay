@@ -5,6 +5,15 @@
     "": {
       "name": "topics",
     },
+    "cli": {
+      "name": "@topics/cli",
+      "bin": {
+        "chat": "src/main.ts",
+      },
+      "dependencies": {
+        "@topics/client": "workspace:*",
+      },
+    },
     "client": {
       "name": "@topics/client",
       "version": "0.1.0",
@@ -20,6 +29,8 @@
     },
   },
   "packages": {
+    "@topics/cli": ["@topics/cli@workspace:cli"],
+
     "@topics/client": ["@topics/client@workspace:client"],
 
     "@topics/dev-issuer": ["@topics/dev-issuer@workspace:dev-issuer"],

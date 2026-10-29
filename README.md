@@ -1,0 +1,120 @@
+# topics
+
+Policy-gated groups and topics on [SpacetimeDB](https://spacetimedb.com). Access is decided entirely by
+kerits policy SAIDs carried in JWTs from `https://oauth.kerits.id` (configurable). Messages are opaque
+bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. The server sets
+`sentAt`, `sender` (JWT `sub`) and `digest` (SHA-256 hex of the payload).
+
+| Path | What |
+|---|---|
+| `module/` | SpacetimeDB module (TypeScript) |
+| `client/` | `@topics/client`, browser + Bun library |
+| `cli/` | `chat` CLI |
+| `dev-issuer/` | local ES256 issuer for tests and dev (never for production) |
+| `e2e/` | end-to-end tests against a local SpacetimeDB |
+
+## Permissions
+
+- **create group**: the token must carry `config.createGroupPolicy` (e.g. your `onboarded` SAID). Until `set_config` sets it, nobody can create groups.
+- **create topic in a group**: the token must carry one of the group's `createTopicPolicies`.
+- **read / write a topic**: the token must carry one of the topic's `readPolicies` / `writePolicies`.
+- Owners (same `sub`) always pass on their own group or topic. Lists are any-of. An empty list means owner only.
+- Group/topic names: `^[a-z0-9][a-z0-9_-]{0,63}$`; topics are addressed `group.topic`. Max payload is 64 KiB.
+
+## Run locally
+
+```sh
+bun install
+spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server entry
+spacetime publish -s local topics --module-path module -y
+
+bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
+spacetime call -s local topics set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs
+
+export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=topics
+export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
+alias chat='bun cli/src/main.ts'
+
+chat group create --name example --permissions '{"create-topic-policy":"ABC1235"}'
+chat topic create --name foo --group example --permissions '{"read-policy":"XYZ","write-policy":"HKI"}' --lifetime 7d
+chat topic list --group example
+chat send --topic example.foo -m "hello world"
+chat pull --topic example.foo
+chat pull --topic example.foo --watch
+```
+
+The dev issuer generates a new key every time it starts, but SpacetimeDB caches JWKS per issuer URL. After
+restarting the issuer, either use a new `PORT=` or restart SpacetimeDB.
+
+`set_config` can only be called by the identity that published the module.
+
+## Tests
+
+```sh
+bun run test        # unit tests (+ client build and a browser-safety check)
+bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 min (expiry tests wait for the sweep)
+```
+
+## Deploy to maincloud
+
+```sh
+spacetime publish -s maincloud topics --module-path module -y
+spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs
+```
+
+Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topics --issuer https://oauth.kerits.id`).
+
+## CLI auth
+
+`chat auth` runs auth-code + PKCE (S256) against the issuer and receives the code on a **fixed** loopback port
+(default `7863`; `--port` / `TOPICS_AUTH_PORT`). kerits treats `http://127.0.0.1:<port>` as the client id,
+so a different port is a different client and old refresh tokens stop working. Tokens are stored in
+`~/.config/topics-chat/config.json` (mode 0600). Expired tokens are refreshed automatically when a
+refresh token exists; `pull --watch` reconnects on refresh. `TOPICS_TOKEN` overrides the stored token
+and is never refreshed.
+
+The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAIDs` (flat key or nested
+`kerits.policySAIDs`). Otherwise it uses `id_token`.
+
+## Library
+
+```ts
+import { connect } from '@topics/client';
+
+const client = await connect({
+  uri: 'wss://maincloud.spacetimedb.com',
+  db: 'topics',
+  token,                                     // kerits JWT
+  onExpired: async () => getFreshToken(),    // optional; return undefined to stop
+});
+await client.createGroup('example', { createTopicPolicies: ['ABC1235'] });
+await client.createTopic('example.foo', { readPolicies: ['XYZ'], writePolicies: ['HKI'], lifetimeSecs: 86400 });
+await client.send('example.foo', new TextEncoder().encode('hello'));
+const msgs = await client.pull('example.foo', { afterId: 10n, limit: 50 });
+const stop = client.watch('example.foo', env => console.log(env.sender, env.payload));
+console.log(await client.closed);            // 'expired' | 'closed'
+```
+
+The library passes the JWT directly on the websocket URL. It does not use the SDK's token exchange,
+because that exchange rewrites `exp` and the module needs the real expiry.
+
+## Known issues
+
+1. **Expired-token streams are cut server-side by a sweep, not instantly.** SpacetimeDB doesn't re-check
+   `exp` on open connections and a module can't force-disconnect. A sweep runs every 15s and drops expired
+   sessions, after which the reader receives nothing new. The client library also closes its own
+   connection at `exp`. A misbehaving client can keep the socket open, but it receives nothing new.
+2. **One session per identity.** If a subject connects twice with different tokens, the most recent
+   token's policies and expiry apply to reads.
+3. **Policy freshness = token freshness.** If a wallet stops vouching for a policy, access continues
+   until the token expires.
+4. SpacetimeDB accepts tokens up to ~60s past `exp` at connect time. The module then rejects them,
+   because it checks `exp` itself.
+5. Reads go through one `my_messages` view that recomputes on change (SpacetimeDB 2.12 TypeScript views
+   take no parameters), and `pull` paging happens on the client. Fine for chat-sized topics.
+
+## Still to verify against real kerits
+
+Run `chat auth` once with a real wallet against a database configured for `https://oauth.kerits.id`.
+Decode the stored token and confirm the policy claim's exact key, and whether it's on the ID token or the
+access token.

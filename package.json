@@ -3,11 +3,12 @@
   "private": true,
   "workspaces": [
     "client",
+    "cli",
     "dev-issuer"
   ],
   "scripts": {
-    "test": "bun run build && bun test module dev-issuer client cli",
-    "test:e2e": "bun test e2e",
+    "test": "bun run build && bun test ./module ./dev-issuer ./client ./cli",
+    "test:e2e": "bun test --timeout 60000 ./e2e",
     "build": "bun run --cwd client build"
   }
 }
