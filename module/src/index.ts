@@ -1,6 +1,10 @@
 import { schema, table, t, SenderError, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { Timestamp } from 'spacetimedb';
-import { readPolicySaids } from './policy';
+import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex } from '@noble/hashes/utils';
+import { missingMessage, parseAddress, readPolicySaids, satisfies, validName } from './policy';
+
+const MAX_PAYLOAD = 65536;
 
 const config = table(
   { name: 'config' },
@@ -24,7 +28,46 @@ const session = table(
   }
 );
 
-const spacetimedb = schema({ config, session });
+const group = table(
+  { name: 'group', public: true },
+  {
+    name: t.string().primaryKey(),
+    owner: t.string(),
+    createTopicPolicies: t.array(t.string()),
+    createdAt: t.timestamp(),
+  }
+);
+
+const topic = table(
+  { name: 'topic', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    address: t.string().unique(),
+    groupName: t.string().index('btree'),
+    name: t.string(),
+    owner: t.string(),
+    readPolicies: t.array(t.string()),
+    writePolicies: t.array(t.string()),
+    createdAt: t.timestamp(),
+    expiresAt: t.option(t.timestamp()),
+  }
+);
+
+const message = table(
+  { name: 'message' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    topicId: t.u64().index('btree'),
+    group: t.string(),
+    topic: t.string(),
+    sentAt: t.timestamp(),
+    sender: t.string(),
+    digest: t.string(),
+    payload: t.array(t.u8()),
+  }
+);
+
+const spacetimedb = schema({ config, session, group, topic, message });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
@@ -42,6 +85,21 @@ function callerClaims(ctx: Ctx) {
   const expiresAt = new Timestamp(BigInt(exp) * 1_000_000n);
   if (expiresAt.microsSinceUnixEpoch <= ctx.timestamp.microsSinceUnixEpoch) throw new SenderError('token expired');
   return { sub: jwt.subject, saids: readPolicySaids(jwt.fullPayload, cfg.policyClaim), expiresAt };
+}
+
+type Action = 'create_group' | 'create_topic' | 'send';
+
+/** Single gate for every write. */
+// ponytail: policy match only; rate limits / quotas per subject go here when needed.
+function authorize(ctx: Ctx, action: Action, target: { required: string[]; owner?: string }) {
+  const claims = callerClaims(ctx);
+  if (claims.sub !== target.owner && !satisfies(claims.saids, target.required))
+    throw new SenderError(missingMessage(action, target.required));
+  return claims;
+}
+
+function requireName(name: string) {
+  if (!validName(name)) throw new SenderError(`invalid name "${name}"`);
 }
 
 export const init = spacetimedb.init(ctx => {
@@ -68,6 +126,67 @@ export const setConfig = spacetimedb.reducer(
     const cfg = getConfig(ctx);
     if (!ctx.sender.isEqual(cfg.admin)) throw new SenderError('admin only');
     ctx.db.config.id.update({ ...cfg, ...args });
+  }
+);
+
+export const createGroup = spacetimedb.reducer(
+  { name: t.string(), createTopicPolicies: t.array(t.string()) },
+  (ctx, { name, createTopicPolicies }) => {
+    const { sub } = authorize(ctx, 'create_group', { required: [getConfig(ctx).createGroupPolicy].filter(Boolean) });
+    requireName(name);
+    if (ctx.db.group.name.find(name)) throw new SenderError(`group "${name}" already exists`);
+    ctx.db.group.insert({ name, owner: sub, createTopicPolicies, createdAt: ctx.timestamp });
+  }
+);
+
+export const createTopic = spacetimedb.reducer(
+  {
+    address: t.string(),
+    readPolicies: t.array(t.string()),
+    writePolicies: t.array(t.string()),
+    lifetimeSecs: t.option(t.u64()),
+  },
+  (ctx, { address, readPolicies, writePolicies, lifetimeSecs }) => {
+    const addr = parseAddress(address);
+    if (!addr) throw new SenderError(`invalid name "${address}"`);
+    const g = ctx.db.group.name.find(addr.group);
+    if (!g) throw new SenderError(`no such group ${addr.group}`);
+    const { sub } = authorize(ctx, 'create_topic', { required: g.createTopicPolicies, owner: g.owner });
+    if (ctx.db.topic.address.find(address)) throw new SenderError(`topic "${address}" already exists`);
+    ctx.db.topic.insert({
+      id: 0n,
+      address,
+      groupName: addr.group,
+      name: addr.topic,
+      owner: sub,
+      readPolicies,
+      writePolicies,
+      createdAt: ctx.timestamp,
+      expiresAt: lifetimeSecs === undefined
+        ? undefined
+        : new Timestamp(ctx.timestamp.microsSinceUnixEpoch + lifetimeSecs * 1_000_000n),
+    });
+  }
+);
+
+export const send = spacetimedb.reducer(
+  { address: t.string(), payload: t.array(t.u8()) },
+  (ctx, { address, payload }) => {
+    const tp = ctx.db.topic.address.find(address);
+    if (!tp) throw new SenderError(`no such topic ${address}`);
+    const { sub } = authorize(ctx, 'send', { required: tp.writePolicies, owner: tp.owner });
+    if (payload.length > MAX_PAYLOAD)
+      throw new SenderError(`payload too large (${payload.length} > ${MAX_PAYLOAD} bytes)`);
+    ctx.db.message.insert({
+      id: 0n,
+      topicId: tp.id,
+      group: tp.groupName,
+      topic: tp.name,
+      sentAt: ctx.timestamp,
+      sender: sub,
+      digest: bytesToHex(sha256(Uint8Array.from(payload))),
+      payload,
+    });
   }
 );
 

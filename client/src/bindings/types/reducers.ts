@@ -6,7 +6,13 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CreateGroupReducer from "../create_group_reducer";
+import CreateTopicReducer from "../create_topic_reducer";
+import SendReducer from "../send_reducer";
 import SetConfigReducer from "../set_config_reducer";
 
+export type CreateGroupParams = __Infer<typeof CreateGroupReducer>;
+export type CreateTopicParams = __Infer<typeof CreateTopicReducer>;
+export type SendParams = __Infer<typeof SendReducer>;
 export type SetConfigParams = __Infer<typeof SetConfigReducer>;
 

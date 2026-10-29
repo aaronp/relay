@@ -34,17 +34,51 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CreateGroupReducer from "./create_group_reducer";
+import CreateTopicReducer from "./create_topic_reducer";
+import SendReducer from "./send_reducer";
 import SetConfigReducer from "./set_config_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import GroupRow from "./group_table";
 import MySessionRow from "./my_session_table";
+import TopicRow from "./topic_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  group: __table({
+    name: 'group',
+    indexes: [
+      { accessor: 'name', name: 'group_name_idx_btree', algorithm: 'btree', columns: [
+        'name',
+      ] },
+    ],
+    constraints: [
+      { name: 'group_name_key', constraint: 'unique', columns: ['name'] },
+    ],
+  }, GroupRow),
+  topic: __table({
+    name: 'topic',
+    indexes: [
+      { accessor: 'address', name: 'topic_address_idx_btree', algorithm: 'btree', columns: [
+        'address',
+      ] },
+      { accessor: 'groupName', name: 'topic_group_name_idx_btree', algorithm: 'btree', columns: [
+        'groupName',
+      ] },
+      { accessor: 'id', name: 'topic_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'topic_address_key', constraint: 'unique', columns: ['address'] },
+      { name: 'topic_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TopicRow),
   mySession: __table({
     name: 'my_session',
     indexes: [
@@ -56,6 +90,9 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("create_group", CreateGroupReducer),
+  __reducerSchema("create_topic", CreateTopicReducer),
+  __reducerSchema("send", SendReducer),
   __reducerSchema("set_config", SetConfigReducer),
 );
 

@@ -19,6 +19,26 @@ export const Config = __t.object("Config", {
 });
 export type Config = __Infer<typeof Config>;
 
+export const Group = __t.object("Group", {
+  name: __t.string(),
+  owner: __t.string(),
+  createTopicPolicies: __t.array(__t.string()),
+  createdAt: __t.timestamp(),
+});
+export type Group = __Infer<typeof Group>;
+
+export const Message = __t.object("Message", {
+  id: __t.u64(),
+  topicId: __t.u64(),
+  group: __t.string(),
+  topic: __t.string(),
+  sentAt: __t.timestamp(),
+  sender: __t.string(),
+  digest: __t.string(),
+  payload: __t.byteArray(),
+});
+export type Message = __Infer<typeof Message>;
+
 export const MySession = __t.object("MySession", {});
 export type MySession = __Infer<typeof MySession>;
 
@@ -29,4 +49,17 @@ export const Session = __t.object("Session", {
   expiresAt: __t.timestamp(),
 });
 export type Session = __Infer<typeof Session>;
+
+export const Topic = __t.object("Topic", {
+  id: __t.u64(),
+  address: __t.string(),
+  groupName: __t.string(),
+  name: __t.string(),
+  owner: __t.string(),
+  readPolicies: __t.array(__t.string()),
+  writePolicies: __t.array(__t.string()),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.option(__t.timestamp()),
+});
+export type Topic = __Infer<typeof Topic>;
 
