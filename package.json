@@ -1,7 +1,7 @@
 {
   "name": "topics",
   "private": true,
-  "workspaces": ["client", "cli", "dev-issuer"],
+  "workspaces": ["client", "dev-issuer"],
   "scripts": {
     "test": "bun test module dev-issuer client cli",
     "test:e2e": "bun test e2e"

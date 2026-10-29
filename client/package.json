@@ -1,0 +1,9 @@
+{
+  "name": "@topics/client",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "spacetimedb": "2.12.*"
+  }
+}
