@@ -12,7 +12,7 @@ const unreachable = (async () => { throw new Error('offline'); }) as unknown as 
 
 test('updateMessage only for a strictly newer version, compared numerically', () => {
   expect(updateMessage('0.9.0', '0.10.0')).toContain('0.9.0 -> 0.10.0');
-  expect(updateMessage('0.9.0', '0.10.0')).toContain('bun install -g @aaronp/relay-cli');
+  expect(updateMessage('0.9.0', '0.10.0')).toContain('bun install -g @pritzlaff/relay-cli');
   expect(updateMessage('0.10.0', '0.10.0')).toBeUndefined();
   expect(updateMessage('0.10.0', '0.9.0')).toBeUndefined();
   expect(updateMessage('0.10.0', undefined)).toBeUndefined();

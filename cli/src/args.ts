@@ -1,6 +1,6 @@
 import { parseAddress } from '../../module/src/policy';
 
-export { displayText, parseLifetime } from '@aaronp/relay-client';
+export { displayText, parseLifetime } from '@pritzlaff/relay-client';
 
 /** `{"read-policy":"X","write-policy":["A","B"]}` -> { 'read-policy': ['X'], 'write-policy': ['A','B'] } */
 export function parsePermissions(json: string, keys: string[]): Record<string, string[]> {

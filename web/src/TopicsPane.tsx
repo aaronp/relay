@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { parseLifetime, topicAccess, type Client, type TopicInfo } from '@aaronp/relay-client';
+import { parseLifetime, topicAccess, type Client, type TopicInfo } from '@pritzlaff/relay-client';
 import type { Claims } from './ConnectionPane';
 import { parseSaids } from './format';
 import { Field, Status, useAction } from './ui';

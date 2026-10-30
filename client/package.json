@@ -1,5 +1,5 @@
 {
-  "name": "@aaronp/relay-client",
+  "name": "@pritzlaff/relay-client",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",

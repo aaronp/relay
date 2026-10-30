@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'node:util';
-import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@aaronp/relay-client';
+import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@pritzlaff/relay-client';
 import { displayText, parseLifetime, parsePermissions, parseTopicAddr } from './args';
 import { login, refresh } from './auth';
 import { loadConfig, saveConfig, type Config } from './config';

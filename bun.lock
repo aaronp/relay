@@ -6,17 +6,17 @@
       "name": "relay",
     },
     "cli": {
-      "name": "@aaronp/relay-cli",
+      "name": "@pritzlaff/relay-cli",
       "version": "0.1.0",
       "bin": {
         "relay": "dist/main.js",
       },
       "devDependencies": {
-        "@aaronp/relay-client": "workspace:*",
+        "@pritzlaff/relay-client": "workspace:*",
       },
     },
     "client": {
-      "name": "@aaronp/relay-client",
+      "name": "@pritzlaff/relay-client",
       "version": "0.1.0",
       "dependencies": {
         "spacetimedb": "2.12.*",
@@ -31,7 +31,7 @@
     "web": {
       "name": "relay-web",
       "dependencies": {
-        "@aaronp/relay-client": "workspace:*",
+        "@pritzlaff/relay-client": "workspace:*",
         "react": "18.3.1",
         "react-dom": "18.3.1",
       },
@@ -45,9 +45,9 @@
     },
   },
   "packages": {
-    "@aaronp/relay-cli": ["@aaronp/relay-cli@workspace:cli"],
+    "@pritzlaff/relay-cli": ["@pritzlaff/relay-cli@workspace:cli"],
 
-    "@aaronp/relay-client": ["@aaronp/relay-client@workspace:client"],
+    "@pritzlaff/relay-client": ["@pritzlaff/relay-client@workspace:client"],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 

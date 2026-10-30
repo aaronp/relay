@@ -8,7 +8,7 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 | Path | What |
 |---|---|
 | `module/` | SpacetimeDB module (TypeScript) |
-| `client/` | `@aaronp/relay-client`, browser + Bun library |
+| `client/` | `@pritzlaff/relay-client`, browser + Bun library |
 | `cli/` | `relay` CLI |
 | `web/` | reference web UI (Vite + React), local only |
 | `dev-issuer/` | local ES256 issuer for tests and dev (never for production) |
@@ -147,12 +147,12 @@ client and CLI share a version. `make publish` skips any version that's already 
 nothing. When iterating on an app alongside this repo, skip the release with `bun link` (run `bun run build` in
 `client/` after each change, because Vite loads `dist`).
 
-The published CLI runs on Bun: `bun install -g @aaronp/relay-cli`, then `relay --help`. `relay --version` prints
+The published CLI runs on Bun: `bun install -g @pritzlaff/relay-cli`, then `relay --help`. `relay --version` prints
 the version and the git SHA it was built from. At a terminal, it also checks npm at most once a day and says when
 a newer version is out (`RELAY_NO_UPDATE_CHECK=1` turns this off).
 
 Before the first CI deploy, set up the GitHub repo:
-- **Secret `NPM_TOKEN`:** a granular npm access token with write access to the `@aaronp` scope. It must be able
+- **Secret `NPM_TOKEN`:** a granular npm access token with write access to the `@pritzlaff` scope. It must be able
   to publish without 2FA prompts. Set it with `gh secret set NPM_TOKEN`.
 - **Secret `SPACETIME_TOKEN`:** just the token, not the whole output of `spacetime login show --token`.
   Set it with
@@ -178,7 +178,7 @@ The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAID
 ## Library
 
 ```ts
-import { connect } from '@aaronp/relay-client';
+import { connect } from '@pritzlaff/relay-client';
 
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',

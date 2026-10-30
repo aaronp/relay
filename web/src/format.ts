@@ -1,4 +1,4 @@
-import { displayText } from '@aaronp/relay-client';
+import { displayText } from '@pritzlaff/relay-client';
 
 /** "A, ,B ,A," -> ['A', 'B'] */
 export const parseSaids = (input: string) => [...new Set(input.split(',').map(s => s.trim()).filter(Boolean))];

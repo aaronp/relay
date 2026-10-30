@@ -1,5 +1,5 @@
 {
-  "name": "@aaronp/relay-cli",
+  "name": "@pritzlaff/relay-cli",
   "version": "0.1.0",
   "type": "module",
   "bin": { "relay": "dist/main.js" },
@@ -9,5 +9,5 @@
     "build": "bun build src/main.ts --target bun --outfile dist/main.js --define RELAY_SHA=\\\"$(git rev-parse --short HEAD)\\\"",
     "prepublishOnly": "bun run build"
   },
-  "devDependencies": { "@aaronp/relay-client": "workspace:*" }
+  "devDependencies": { "@pritzlaff/relay-client": "workspace:*" }
 }

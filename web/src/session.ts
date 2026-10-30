@@ -1,7 +1,7 @@
 // Settings + tokens in localStorage (dev tool), pending PKCE state in sessionStorage across the redirect.
 import {
   authorizeUrl, createPkce, decodeExp, discover, exchangeCode, parseCallback, refreshTokens, type Tokens,
-} from '@aaronp/relay-client';
+} from '@pritzlaff/relay-client';
 
 export type Settings = { walletUrl: string; server: string; db: string };
 
