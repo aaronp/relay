@@ -47,3 +47,30 @@ jobs:
       # Must be the token of the identity that first published the database (it owns it and is its admin).
       - run: spacetime login --token "${{ secrets.SPACETIME_TOKEN }}"
       - run: make deploy DEPLOY_DB="${{ vars.SPACETIME_DB || 'relay' }}"
+
+  # The web reference UI, at https://<owner>.github.io/<repo>/ (Settings → Pages → Source: GitHub Actions).
+  pages:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency: pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd web build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      # Pages has no SPA fallback; serving the app as 404.html makes /<repo>/callback (the OAuth redirect) load it.
+      - run: cp web/dist/index.html web/dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

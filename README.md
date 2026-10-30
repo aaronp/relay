@@ -71,11 +71,27 @@ make ui                                               # then open http://127.0.0
   `allowedAudiences`, and set `trustedIssuer` to the wallet server URL you use.
 - Wallet servers other than kerits must allow CORS from `http://127.0.0.1:5173` on discovery and `/token`.
   kerits already does.
-- The settings and tokens (including the refresh token) are kept in `localStorage`. That's fine for a local
-  dev tool, but don't host it like this.
+- The settings and tokens (including the refresh token) are kept in `localStorage`.
 - SpacetimeDB URL and database changes apply when you click **Reconnect**.
 - The "can read / can write" badges compare your token's SAIDs with each topic's policies (owner always
   passes). An empty Pull on a readable-looking topic just means no messages.
+
+### Hosted on GitHub Pages
+
+CI's `pages` job publishes the UI to https://aaronp.github.io/relay/ after every passing push to `master`.
+There it connects to `wss://maincloud.spacetimedb.com` and the `relay` database by default.
+
+One-time setup:
+- In the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
+- Add the Pages origin to the deployed database's audiences:
+  `spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs '["http://127.0.0.1:7863", "https://aaronp.github.io"]'`
+
+On the hosted page:
+- The kerits client id is `https://aaronp.github.io`, and the redirect is `/relay/callback`. Pages serves the
+  app as `404.html` for that path, so the redirect still loads the app.
+- **Security caveat:** every `aaronp.github.io/*` site shares that origin, so they also share its
+  `localStorage` (which holds the tokens) and its kerits client id. That's fine for a test page. For anything
+  real, use a custom domain.
 
 ## Auth off (dev)
 

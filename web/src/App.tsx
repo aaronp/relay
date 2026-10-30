@@ -4,7 +4,7 @@ import { ConnectionPane, type Claims } from './ConnectionPane';
 import { TopicPane } from './TopicPane';
 import { TopicsPane } from './TopicsPane';
 import {
-  completeLogin, loadSettings, loadTokens, refresh, saveSettings, saveTokens, usableTokens, type Settings,
+  CALLBACK_PATH, completeLogin, loadSettings, loadTokens, refresh, saveSettings, saveTokens, usableTokens, type Settings,
 } from './session';
 
 // StrictMode runs effects twice in dev; the callback (and its one-shot PKCE state) must be handled once.
@@ -36,7 +36,7 @@ export function App() {
   anonymousRef.current = anonymous;
 
   useEffect(() => {
-    if (window.location.pathname !== '/callback' || callbackHandled) return;
+    if (window.location.pathname !== CALLBACK_PATH || callbackHandled) return;
     callbackHandled = true;
     completeLogin(window.location.href)
       .then(t => { setAuthError(undefined); setAnonymous(false); setTokens(t); setSession(n => n + 1); })

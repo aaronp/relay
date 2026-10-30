@@ -5,15 +5,23 @@ import {
 
 export type Settings = { walletUrl: string; server: string; db: string };
 
-/** kerits uses the origin as client_id, so the UI must always run here. */
+/** kerits uses the origin as client_id, so the dev server must always run here (not localhost). */
 export const EXPECTED_ORIGIN = 'http://127.0.0.1:5173';
+/** '/' locally, '/relay/' on GitHub Pages. */
+export const BASE = import.meta.env?.BASE_URL ?? '/';
+export const CALLBACK_PATH = `${BASE}callback`;
+const DEV = !!import.meta.env?.DEV;
 const clientId = () => window.location.origin;
-const redirectUri = () => `${clientId()}/callback`;
+const redirectUri = () => `${clientId()}${CALLBACK_PATH}`;
 const MIN_VALIDITY_MS = 30_000; // don't connect with a token that's about to lapse
 const KEY = 'topics-web';
 const PENDING = 'topics-web-pending';
 
-const DEFAULTS: Settings = { walletUrl: 'https://oauth.kerits.id', server: 'ws://127.0.0.1:3010', db: 'relay' };
+const DEFAULTS: Settings = {
+  walletUrl: 'https://oauth.kerits.id',
+  server: DEV ? 'ws://127.0.0.1:3010' : 'wss://maincloud.spacetimedb.com',
+  db: 'relay',
+};
 
 type Stored = { settings?: Partial<Settings>; tokens?: Tokens | null };
 type Pending = { verifier: string; state: string; walletUrl: string };
@@ -31,7 +39,7 @@ export const loadTokens = (): Tokens | null => read().tokens ?? null;
 export const saveTokens = (tokens: Tokens | null) => write({ tokens });
 
 export async function beginLogin(s: Settings): Promise<void> {
-  if (clientId() !== EXPECTED_ORIGIN)
+  if (DEV && clientId() !== EXPECTED_ORIGIN)
     throw new Error(`open the UI at ${EXPECTED_ORIGIN} (kerits needs a stable origin)`);
   const ep = await discover(s.walletUrl);
   const pkce = await createPkce();
@@ -45,7 +53,7 @@ export async function completeLogin(url: string): Promise<Tokens> {
   let pending: Pending | null = null;
   try { pending = JSON.parse(sessionStorage.getItem(PENDING) ?? 'null'); } catch {}
   sessionStorage.removeItem(PENDING);
-  window.history.replaceState({}, '', '/');
+  window.history.replaceState({}, '', BASE);
   const { code } = parseCallback(url, pending);
   const ep = await discover(pending!.walletUrl);
   const tokens = await exchangeCode(ep, {
