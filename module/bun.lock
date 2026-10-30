@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "topics-module",
+      "name": "relay-module",
       "dependencies": {
         "@noble/hashes": "^1.8.0",
         "spacetimedb": "2.12.*",

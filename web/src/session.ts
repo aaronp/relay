@@ -1,7 +1,7 @@
 // Settings + tokens in localStorage (dev tool), pending PKCE state in sessionStorage across the redirect.
 import {
   authorizeUrl, createPkce, decodeExp, discover, exchangeCode, parseCallback, refreshTokens, type Tokens,
-} from '@topics/client';
+} from '@aaronp/relay-client';
 
 export type Settings = { walletUrl: string; server: string; db: string };
 
@@ -14,8 +14,8 @@ const DEV = !!import.meta.env?.DEV;
 const clientId = () => window.location.origin;
 const redirectUri = () => `${clientId()}${CALLBACK_PATH}`;
 const MIN_VALIDITY_MS = 30_000; // don't connect with a token that's about to lapse
-const KEY = 'topics-web';
-const PENDING = 'topics-web-pending';
+const KEY = 'relay-web';
+const PENDING = 'relay-web-pending';
 
 const DEFAULTS: Settings = {
   walletUrl: 'https://oauth.kerits.id',

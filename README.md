@@ -1,4 +1,4 @@
-# topics
+# relay
 
 Policy-gated groups and topics on [SpacetimeDB](https://spacetimedb.com). Access is decided entirely by
 kerits policy SAIDs carried in JWTs from `https://oauth.kerits.id` (configurable). Messages are opaque
@@ -8,8 +8,8 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 | Path | What |
 |---|---|
 | `module/` | SpacetimeDB module (TypeScript) |
-| `client/` | `@topics/client`, browser + Bun library |
-| `cli/` | `chat` CLI |
+| `client/` | `@aaronp/relay-client`, browser + Bun library |
+| `cli/` | `relay` CLI |
 | `web/` | reference web UI (Vite + React), local only |
 | `dev-issuer/` | local ES256 issuer for tests and dev (never for production) |
 | `e2e/` | end-to-end tests against a local SpacetimeDB |
@@ -30,18 +30,18 @@ spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server e
 spacetime publish -s local aaronp-relay --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local aaronp-relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
+spacetime call -s local aaronp-relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["relay-dev"]'
 
-export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=aaronp-relay
-export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
-alias chat='bun cli/src/main.ts'
+export RELAY_SERVER=ws://127.0.0.1:3010 RELAY_DB=aaronp-relay
+export RELAY_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
+alias relay='bun cli/src/main.ts'
 
-chat group create --name example --permissions '{"create-topic-policy":"ABC1235"}'
-chat topic create --name foo --group example --permissions '{"read-policy":"XYZ","write-policy":"HKI"}' --lifetime 7d
-chat topic list --group example
-chat send --topic example.foo -m "hello world"
-chat pull --topic example.foo
-chat pull --topic example.foo --watch
+relay group create --name example --permissions '{"create-topic-policy":"ABC1235"}'
+relay topic create --name foo --group example --permissions '{"read-policy":"XYZ","write-policy":"HKI"}' --lifetime 7d
+relay topic list --group example
+relay send --topic example.foo -m "hello world"
+relay pull --topic example.foo
+relay pull --topic example.foo --watch
 ```
 
 The dev issuer generates a new key every time it starts, but SpacetimeDB caches JWKS per issuer URL. After
@@ -99,7 +99,7 @@ To try groups and topics without any tokens or SAIDs, switch auth off for one da
 
 ```sh
 make auth-off                  # = spacetime call -s local aaronp-relay set_auth_disabled true (admin only)
-TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db aaronp-relay   # or --no-auth
+RELAY_NO_AUTH=1 relay group create --name test --server ws://127.0.0.1:3010 --db aaronp-relay   # or --no-auth
 make auth-on                   # back on; drops every session, so clients reconnect with a token
 ```
 
@@ -140,9 +140,20 @@ the database again, empty. To stop that, disable the workflow or remove the `SPA
 
 `.github/workflows/ci.yml` runs on every push and pull request. It runs the unit tests and builds the web UI, then
 starts a local SpacetimeDB and runs the e2e tests. If everything passes on a push to `master`, it runs
-`make deploy` against maincloud.
+`make deploy` against maincloud, then `make publish` to release the client and CLI to npm.
+
+To release, run `make bump-patch`, `make bump-minor` or `make bump-major`, then commit and push to `master`. The
+client and CLI share a version. `make publish` skips any version that's already on npm, so other pushes release
+nothing. When iterating on an app alongside this repo, skip the release with `bun link` (run `bun run build` in
+`client/` after each change, because Vite loads `dist`).
+
+The published CLI runs on Bun: `bun install -g @aaronp/relay-cli`, then `relay --help`. `relay --version` prints
+the version and the git SHA it was built from. At a terminal, it also checks npm at most once a day and says when
+a newer version is out (`RELAY_NO_UPDATE_CHECK=1` turns this off).
 
 Before the first CI deploy, set up the GitHub repo:
+- **Secret `NPM_TOKEN`:** a granular npm access token with write access to the `@aaronp` scope. It must be able
+  to publish without 2FA prompts. Set it with `gh secret set NPM_TOKEN`.
 - **Secret `SPACETIME_TOKEN`:** just the token, not the whole output of `spacetime login show --token`.
   Set it with
   `make -s show-token | gh secret set SPACETIME_TOKEN`.
@@ -150,15 +161,15 @@ Before the first CI deploy, set up the GitHub repo:
   published the database, because it owns the database and is its admin.
 - **Variable `SPACETIME_DB`** (optional): the database name. The default is `aaronp-relay`.
 
-Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db aaronp-relay --issuer https://oauth.kerits.id`).
+Then `relay auth` (defaults: `--server wss://maincloud.spacetimedb.com --db aaronp-relay --issuer https://oauth.kerits.id`).
 
 ## CLI auth
 
-`chat auth` runs auth-code + PKCE (S256) against the issuer and receives the code on a **fixed** loopback port
-(default `7863`; `--port` / `TOPICS_AUTH_PORT`). kerits treats `http://127.0.0.1:<port>` as the client id,
+`relay auth` runs auth-code + PKCE (S256) against the issuer and receives the code on a **fixed** loopback port
+(default `7863`; `--port` / `RELAY_AUTH_PORT`). kerits treats `http://127.0.0.1:<port>` as the client id,
 so a different port is a different client and old refresh tokens stop working. Tokens are stored in
-`~/.config/topics-chat/config.json` (mode 0600). A token with less than 30s left counts as expired. Expired tokens are refreshed automatically when a
-refresh token exists; `pull --watch` reconnects on refresh. `TOPICS_TOKEN` overrides the stored token
+`~/.config/relay/config.json` (mode 0600). A token with less than 30s left counts as expired. Expired tokens are refreshed automatically when a
+refresh token exists; `pull --watch` reconnects on refresh. `RELAY_TOKEN` overrides the stored token
 and is never refreshed.
 
 The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAIDs` (flat key or nested
@@ -167,7 +178,7 @@ The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAID
 ## Library
 
 ```ts
-import { connect } from '@topics/client';
+import { connect } from '@aaronp/relay-client';
 
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',
@@ -205,6 +216,6 @@ on the URL, where proxies may log it.
 
 ## Still to verify against real kerits
 
-Run `chat auth` once with a real wallet against a database configured for `https://oauth.kerits.id`.
+Run `relay auth` once with a real wallet against a database configured for `https://oauth.kerits.id`.
 Decode the stored token and confirm the policy claim's exact key, and whether it's on the ID token or the
 access token.

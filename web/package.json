@@ -1,5 +1,5 @@
 {
-  "name": "@topics/web",
+  "name": "relay-web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@topics/client": "workspace:*",
+    "@aaronp/relay-client": "workspace:*",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

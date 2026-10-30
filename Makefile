@@ -7,7 +7,7 @@ UI_PORT ?= 5173
 DEPLOY_SERVER ?= maincloud
 DEPLOY_DB     ?= aaronp-relay
 
-.PHONY: dev stop dev-status build ui auth-off auth-on deploy undeploy show-token
+.PHONY: dev stop dev-status build ui auth-off auth-on deploy undeploy show-token publish bump-major bump-minor bump-patch
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -36,9 +36,9 @@ dev-status:
 	fi
 	@spacetime server ping $(SERVER) >/dev/null 2>&1
 
-## Build the standalone `chat` binary into dist/chat.
+## Build the standalone `relay` binary into dist/relay.
 build:
-	bun build cli/src/main.ts --compile --outfile dist/chat
+	bun build cli/src/main.ts --compile --outfile dist/relay --define RELAY_SHA=\"$$(git rev-parse --short HEAD)\"
 
 ## Start the web reference UI at http://127.0.0.1:5173 (fixed origin = kerits client_id).
 ui:
@@ -65,3 +65,21 @@ undeploy:
 ## e.g. make -s show-token | gh secret set SPACETIME_TOKEN
 show-token:
 	@spacetime login show --token | awk '/auth token/ {printf "%s", $$NF}'
+
+## Bump the client and CLI to the next version together. Commit and push to master to release it.
+bump-major bump-minor bump-patch:
+	@for pkg in client cli; do ( cd $$pkg && bun pm version $(@:bump-%=%) --no-git-tag-version ); done
+
+## Publish the client, then the CLI, to npm (needs NPM_TOKEN; .npmrc maps it to the registry). Skips any version
+## that's already out; bump a package.json to release it.
+publish:
+	@set -e; for pkg in client cli; do ( \
+		cd $$pkg; \
+		spec=$$(bun -p "const p = require('./package.json'); p.name + '@' + p.version"); \
+		if npm view "$$spec" version 2>/dev/null | grep -q .; then \
+			echo "$$spec is already published"; \
+		else \
+			: "$${NPM_TOKEN:?set NPM_TOKEN to an npm access token to publish $$spec}"; \
+			bun publish; \
+		fi \
+	); done

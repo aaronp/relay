@@ -1,5 +1,5 @@
 {
-  "name": "topics",
+  "name": "relay",
   "private": true,
   "workspaces": [
     "client",

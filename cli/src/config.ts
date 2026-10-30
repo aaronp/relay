@@ -9,9 +9,9 @@ export type Config = {
   port: number;
   token?: string;
   refreshToken?: string;
-  /** true when the token came from TOPICS_TOKEN (don't refresh or persist it) */
+  /** true when the token came from RELAY_TOKEN (don't refresh or persist it) */
   tokenFromEnv?: boolean;
-  /** --no-auth / TOPICS_NO_AUTH=1: connect without a token (server must have auth disabled). Never persisted. */
+  /** --no-auth / RELAY_NO_AUTH=1: connect without a token (server must have auth disabled). Never persisted. */
   noAuth?: boolean;
 };
 
@@ -24,7 +24,7 @@ const DEFAULTS = {
   port: 7863,
 };
 
-const file = () => join(homedir(), '.config', 'topics-chat', 'config.json');
+const file = () => join(homedir(), '.config', 'relay', 'config.json');
 
 function readStored(): Stored {
   try { return existsSync(file()) ? JSON.parse(readFileSync(file(), 'utf8')) : {}; } catch { return {}; }
@@ -34,16 +34,16 @@ function readStored(): Stored {
 export function loadConfig(flags: { server?: string; db?: string; issuer?: string; port?: string; 'no-auth'?: boolean }): Config {
   const s = readStored();
   const env = process.env;
-  const envToken = env.TOPICS_TOKEN;
+  const envToken = env.RELAY_TOKEN;
   return {
-    server: flags.server ?? env.TOPICS_SERVER ?? s.server ?? DEFAULTS.server,
-    db: flags.db ?? env.TOPICS_DB ?? s.db ?? DEFAULTS.db,
-    issuer: flags.issuer ?? env.TOPICS_ISSUER ?? s.issuer ?? DEFAULTS.issuer,
-    port: Number(flags.port ?? env.TOPICS_AUTH_PORT ?? s.port ?? DEFAULTS.port),
+    server: flags.server ?? env.RELAY_SERVER ?? s.server ?? DEFAULTS.server,
+    db: flags.db ?? env.RELAY_DB ?? s.db ?? DEFAULTS.db,
+    issuer: flags.issuer ?? env.RELAY_ISSUER ?? s.issuer ?? DEFAULTS.issuer,
+    port: Number(flags.port ?? env.RELAY_AUTH_PORT ?? s.port ?? DEFAULTS.port),
     token: envToken ?? s.token,
     refreshToken: envToken ? undefined : s.refreshToken,
     tokenFromEnv: !!envToken,
-    noAuth: flags['no-auth'] ?? env.TOPICS_NO_AUTH === '1',
+    noAuth: flags['no-auth'] ?? env.RELAY_NO_AUTH === '1',
   };
 }
 

@@ -1,23 +1,25 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'node:util';
-import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@topics/client';
+import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@aaronp/relay-client';
 import { displayText, parseLifetime, parsePermissions, parseTopicAddr } from './args';
 import { login, refresh } from './auth';
 import { loadConfig, saveConfig, type Config } from './config';
+import { VERSION, checkForUpdate } from './version';
 
 const USAGE = `usage:
-  chat auth
-  chat group create --name <g> --permissions '{"create-topic-policy":"SAID"}'
-  chat topic create --name <t> --group <g> --permissions '{"read-policy":"SAID","write-policy":["SAID",...]}' [--lifetime 7d]
-  chat topic list --group <g>
-  chat send --topic <g.t> (-m <text> | --file <path>)
-  chat pull --topic <g.t> [--watch] [--json]
+  relay auth
+  relay group create --name <g> --permissions '{"create-topic-policy":"SAID"}'
+  relay topic create --name <t> --group <g> --permissions '{"read-policy":"SAID","write-policy":["SAID",...]}' [--lifetime 7d]
+  relay topic list --group <g>
+  relay send --topic <g.t> (-m <text> | --file <path>)
+  relay pull --topic <g.t> [--watch] [--json]
 options: --server <ws(s)://...> --db <name> --issuer <url> --port <loopback port>
-         --no-auth (or TOPICS_NO_AUTH=1): no token; only works while the server has auth disabled`;
+         --no-auth (or RELAY_NO_AUTH=1): no token; only works while the server has auth disabled
+         -v, --version: print the version (RELAY_NO_UPDATE_CHECK=1 turns off the daily new-version check)`;
 
 setLogLevel('warn'); // keep stdout clean for piping
 
-const EXPIRED = 'token expired — run "chat auth"';
+const EXPIRED = 'token expired — run "relay auth"';
 const MIN_VALIDITY_MS = 30_000; // don't start a command on a token that's about to lapse
 
 const { values: o, positionals: [cmd, sub] } = parseArgs({
@@ -30,6 +32,7 @@ const { values: o, positionals: [cmd, sub] } = parseArgs({
     server: { type: 'string' }, db: { type: 'string' }, issuer: { type: 'string' }, port: { type: 'string' },
     'no-auth': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean', short: 'v' },
   },
 });
 
@@ -42,7 +45,7 @@ const need = (v: string | undefined, flag: string) => {
 async function freshToken(cfg: Config): Promise<string> {
   const valid = (t?: string) => { try { return !!t && decodeExp(t) * 1000 - Date.now() > MIN_VALIDITY_MS; } catch { return false; } };
   if (valid(cfg.token)) return cfg.token!;
-  if (!cfg.token && !cfg.refreshToken) throw new Error('not signed in — run "chat auth"');
+  if (!cfg.token && !cfg.refreshToken) throw new Error('not signed in — run "relay auth"');
   const r = cfg.tokenFromEnv ? undefined : await refresh(cfg);
   if (!r) throw new Error(EXPIRED);
   Object.assign(cfg, r);
@@ -77,6 +80,7 @@ function printMessage(e: Envelope, json?: boolean) {
 }
 
 async function run(): Promise<number> {
+  if (o.version) { console.log(`relay ${VERSION}`); return 0; }
   const cfg = loadConfig(o);
   if (o.help || !cmd) { console.log(USAGE); return o.help ? 0 : 1; }
 
@@ -140,7 +144,10 @@ async function run(): Promise<number> {
   }
 }
 
+// Runs alongside the command rather than before it, so it can't delay it; printed as soon as it's known.
+const updateChecked = checkForUpdate();
+
 run().then(
-  code => process.exit(code),
-  e => { console.error(e instanceof Error ? e.message : String(e)); process.exit(1); }
+  code => updateChecked.then(() => process.exit(code)),
+  e => { console.error(e instanceof Error ? e.message : String(e)); updateChecked.then(() => process.exit(1)); }
 );

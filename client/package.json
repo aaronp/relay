@@ -1,8 +1,9 @@
 {
-  "name": "@topics/client",
+  "name": "@aaronp/relay-client",
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -12,16 +13,20 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/**/*.test.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts --outdir dist --target browser --format esm --external spacetimedb && tsc -p tsconfig.json"
+    "build": "rm -rf dist && bun build src/index.ts --outdir dist --target browser --format esm --external spacetimedb && tsc -p tsconfig.json",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "spacetimedb": "2.12.*"
   },
   "devDependencies": {
     "typescript": "~5.6.2"
-  },
-  "types": "src/index.ts"
+  }
 }

@@ -59,12 +59,12 @@ test('re-enabling auth rejects anonymous connections again and cuts their access
   }
 });
 
-test('CLI: TOPICS_NO_AUTH=1 works with no token at all', async () => {
+test('CLI: RELAY_NO_AUTH=1 works with no token at all', async () => {
   env.admin('set_auth_disabled', 'true');
-  const HOME = mkdtempSync(join(tmpdir(), 'chat-home-'));
-  const chat = async (...args: string[]) => {
+  const HOME = mkdtempSync(join(tmpdir(), 'relay-home-'));
+  const relay = async (...args: string[]) => {
     const p = Bun.spawn(['bun', new URL('../cli/src/main.ts', import.meta.url).pathname, ...args], {
-      env: { ...process.env, HOME, TOPICS_SERVER: env.uri, TOPICS_DB: env.db, TOPICS_NO_AUTH: '1', TOPICS_TOKEN: '' },
+      env: { ...process.env, HOME, RELAY_SERVER: env.uri, RELAY_DB: env.db, RELAY_NO_AUTH: '1', RELAY_TOKEN: '' },
       stdout: 'pipe', stderr: 'pipe',
     });
     const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
@@ -72,8 +72,8 @@ test('CLI: TOPICS_NO_AUTH=1 works with no token at all', async () => {
     expect(code).toBe(0);
     return stdout;
   };
-  await chat('group', 'create', '--name', 'cli');
-  await chat('topic', 'create', '--name', 'x', '--group', 'cli');
-  await chat('send', '--topic', 'cli.x', '-m', 'no auth');
-  expect(await chat('pull', '--topic', 'cli.x')).toContain('no auth');
+  await relay('group', 'create', '--name', 'cli');
+  await relay('topic', 'create', '--name', 'x', '--group', 'cli');
+  await relay('send', '--topic', 'cli.x', '-m', 'no auth');
+  expect(await relay('pull', '--topic', 'cli.x')).toContain('no auth');
 });

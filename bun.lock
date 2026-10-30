@@ -3,19 +3,20 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "topics",
+      "name": "relay",
     },
     "cli": {
-      "name": "@topics/cli",
+      "name": "@aaronp/relay-cli",
+      "version": "0.1.0",
       "bin": {
-        "chat": "src/main.ts",
+        "relay": "dist/main.js",
       },
-      "dependencies": {
-        "@topics/client": "workspace:*",
+      "devDependencies": {
+        "@aaronp/relay-client": "workspace:*",
       },
     },
     "client": {
-      "name": "@topics/client",
+      "name": "@aaronp/relay-client",
       "version": "0.1.0",
       "dependencies": {
         "spacetimedb": "2.12.*",
@@ -25,12 +26,12 @@
       },
     },
     "dev-issuer": {
-      "name": "@topics/dev-issuer",
+      "name": "relay-dev-issuer",
     },
     "web": {
-      "name": "@topics/web",
+      "name": "relay-web",
       "dependencies": {
-        "@topics/client": "workspace:*",
+        "@aaronp/relay-client": "workspace:*",
         "react": "18.3.1",
         "react-dom": "18.3.1",
       },
@@ -44,6 +45,10 @@
     },
   },
   "packages": {
+    "@aaronp/relay-cli": ["@aaronp/relay-cli@workspace:cli"],
+
+    "@aaronp/relay-client": ["@aaronp/relay-client@workspace:client"],
+
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
     "@babel/compat-data": ["@babel/compat-data@7.29.7", "", {}, "sha512-locTkQyKvwIEgBzVrn8693ebc97F2U8ZHjbXwDXJ5Fn2TCpNwTlKcaKLkdHop5c/icOFE7qt7Q9JC5hnKNa6Gg=="],
@@ -190,14 +195,6 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.66.0", "", { "os": "win32", "cpu": "x64" }, "sha512-xA+neBh1bqkqaS3b48T2UHZnDsTIpb9B0h+TdBzynjF/ymCpYndhfY10RqW0qSKB1HqqQA83mINVhAdwA+mETg=="],
 
-    "@topics/cli": ["@topics/cli@workspace:cli"],
-
-    "@topics/client": ["@topics/client@workspace:client"],
-
-    "@topics/dev-issuer": ["@topics/dev-issuer@workspace:dev-issuer"],
-
-    "@topics/web": ["@topics/web@workspace:web"],
-
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
     "@types/babel__generator": ["@types/babel__generator@7.27.0", "", { "dependencies": { "@babel/types": "^7.0.0" } }, "sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg=="],
@@ -273,6 +270,10 @@
     "react-dom": ["react-dom@18.3.1", "", { "dependencies": { "loose-envify": "^1.1.0", "scheduler": "^0.23.2" }, "peerDependencies": { "react": "^18.3.1" } }, "sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw=="],
 
     "react-refresh": ["react-refresh@0.14.2", "", {}, "sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA=="],
+
+    "relay-dev-issuer": ["relay-dev-issuer@workspace:dev-issuer"],
+
+    "relay-web": ["relay-web@workspace:web"],
 
     "rollup": ["rollup@4.66.0", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@napi-rs/lzma-linux-x64-gnu": "1.5.1", "@rollup/rollup-android-arm-eabi": "4.66.0", "@rollup/rollup-android-arm64": "4.66.0", "@rollup/rollup-darwin-arm64": "4.66.0", "@rollup/rollup-darwin-x64": "4.66.0", "@rollup/rollup-freebsd-arm64": "4.66.0", "@rollup/rollup-freebsd-x64": "4.66.0", "@rollup/rollup-linux-arm-gnueabihf": "4.66.0", "@rollup/rollup-linux-arm-musleabihf": "4.66.0", "@rollup/rollup-linux-arm64-gnu": "4.66.0", "@rollup/rollup-linux-arm64-musl": "4.66.0", "@rollup/rollup-linux-loong64-gnu": "4.66.0", "@rollup/rollup-linux-loong64-musl": "4.66.0", "@rollup/rollup-linux-ppc64-gnu": "4.66.0", "@rollup/rollup-linux-ppc64-musl": "4.66.0", "@rollup/rollup-linux-riscv64-gnu": "4.66.0", "@rollup/rollup-linux-riscv64-musl": "4.66.0", "@rollup/rollup-linux-s390x-gnu": "4.66.0", "@rollup/rollup-linux-x64-gnu": "4.66.0", "@rollup/rollup-linux-x64-musl": "4.66.0", "@rollup/rollup-openbsd-x64": "4.66.0", "@rollup/rollup-openharmony-arm64": "4.66.0", "@rollup/rollup-win32-arm64-msvc": "4.66.0", "@rollup/rollup-win32-ia32-msvc": "4.66.0", "@rollup/rollup-win32-x64-gnu": "4.66.0", "@rollup/rollup-win32-x64-msvc": "4.66.0", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-Onq6/qO4ARhxIs+jYiHE0pYehadLyMECAiGEqQ+0/aWND3+2PmifJIIqBLYtuBODqHTlOUEQFtIVPyCy0Lck7A=="],
 

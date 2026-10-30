@@ -10,6 +10,6 @@ export default defineConfig({
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
   preview: { host: '127.0.0.1', port: 5173, strictPort: true },
   resolve: {
-    alias: { '@topics/client': fileURLToPath(new URL('../client/src/index.ts', import.meta.url)) },
+    alias: { '@aaronp/relay-client': fileURLToPath(new URL('../client/src/index.ts', import.meta.url)) },
   },
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Client, Envelope, TopicInfo } from '@topics/client';
+import type { Client, Envelope, TopicInfo } from '@aaronp/relay-client';
 import { displayPayload } from './format';
 import { Status, useAction } from './ui';
 

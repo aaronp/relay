@@ -5,15 +5,15 @@ import { join } from 'node:path';
 import { setup } from './harness';
 
 let env: Awaited<ReturnType<typeof setup>>;
-const HOME = mkdtempSync(join(tmpdir(), 'chat-home-'));
+const HOME = mkdtempSync(join(tmpdir(), 'relay-home-'));
 const MAIN = new URL('../cli/src/main.ts', import.meta.url).pathname;
 
 beforeAll(async () => { env = await setup(); });
 afterAll(() => env?.teardown());
 
-async function chat(token: string, ...args: string[]) {
+async function relay(token: string, ...args: string[]) {
   const p = Bun.spawn(['bun', MAIN, ...args], {
-    env: { ...process.env, HOME, TOPICS_SERVER: env.uri, TOPICS_DB: env.db, TOPICS_TOKEN: token },
+    env: { ...process.env, HOME, RELAY_SERVER: env.uri, RELAY_DB: env.db, RELAY_TOKEN: token },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -24,7 +24,7 @@ async function chat(token: string, ...args: string[]) {
 test('group create, topic create, list, send, pull', async () => {
   const tok = await env.tokenFor('alice', ['ONBOARDED']);
   const ok = async (...a: string[]) => {
-    const r = await chat(tok, ...a);
+    const r = await relay(tok, ...a);
     expect(r.stderr).toBe('');
     expect(r.code).toBe(0);
     return r.stdout;
@@ -40,19 +40,19 @@ test('group create, topic create, list, send, pull', async () => {
 });
 
 test('server error goes to stderr with exit 1', async () => {
-  const r = await chat(await env.tokenFor('mallory', []), 'group', 'create', '--name', 'nope', '--permissions', '{}');
+  const r = await relay(await env.tokenFor('mallory', []), 'group', 'create', '--name', 'nope', '--permissions', '{}');
   expect(r.code).toBe(1);
   expect(r.stderr).toContain('create_group requires one of [ONBOARDED]');
 });
 
 test('expired token message', async () => {
-  const r = await chat(await env.tokenFor('old', [], -120), 'topic', 'list', '--group', 'example');
+  const r = await relay(await env.tokenFor('old', [], -120), 'topic', 'list', '--group', 'example');
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain('token expired — run "chat auth"');
+  expect(r.stderr).toContain('token expired — run "relay auth"');
 });
 
 test('token about to expire counts as expired (no refresh available)', async () => {
-  const r = await chat(await env.tokenFor('soon', [], 10), 'topic', 'list', '--group', 'example');
+  const r = await relay(await env.tokenFor('soon', [], 10), 'topic', 'list', '--group', 'example');
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain('token expired — run "chat auth"');
+  expect(r.stderr).toContain('token expired — run "relay auth"');
 });

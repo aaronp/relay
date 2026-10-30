@@ -46,7 +46,7 @@ export async function startDevIssuer(opts: { port: number }) {
     const iat = Math.floor(Date.now() / 1000);
     const header = b64url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid }));
     const payload = b64url(JSON.stringify({
-      iss: issuer, sub: c.sub, aud: c.aud ?? 'topics-dev', iat, exp: iat + c.ttlSec,
+      iss: issuer, sub: c.sub, aud: c.aud ?? 'relay-dev', iat, exp: iat + c.ttlSec,
       [c.claimKey ?? 'kerits.policySAIDs']: c.saids,
     }));
     // WebCrypto ECDSA signatures are already raw r||s, which is what JWS ES256 wants.

@@ -1,7 +1,13 @@
 {
-  "name": "@topics/cli",
-  "private": true,
+  "name": "@aaronp/relay-cli",
+  "version": "0.1.0",
   "type": "module",
-  "bin": { "chat": "src/main.ts" },
-  "dependencies": { "@topics/client": "workspace:*" }
+  "bin": { "relay": "dist/main.js" },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "bun build src/main.ts --target bun --outfile dist/main.js --define RELAY_SHA=\\\"$(git rev-parse --short HEAD)\\\"",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": { "@aaronp/relay-client": "workspace:*" }
 }

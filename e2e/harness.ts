@@ -1,8 +1,8 @@
 // e2e precondition: `spacetime start --listen-addr 127.0.0.1:3010` is running (the CLI's `local` server).
 import { startDevIssuer } from '../dev-issuer/src/issuer';
 
-export const URI = process.env.TOPICS_TEST_URI ?? 'ws://127.0.0.1:3010';
-const SERVER = process.env.TOPICS_TEST_SERVER ?? 'local';
+export const URI = process.env.RELAY_TEST_URI ?? 'ws://127.0.0.1:3010';
+const SERVER = process.env.RELAY_TEST_SERVER ?? 'local';
 const ROOT = new URL('..', import.meta.url).pathname;
 
 // SpacetimeDB caches JWKS per issuer URL and the dev key is fresh per run, so use a fresh port per run.
@@ -17,14 +17,14 @@ function run(args: string[]) {
 /** Fresh database + dev issuer per test file; config points at the issuer with createGroupPolicy ONBOARDED. */
 export async function setup() {
   const iss = await startDevIssuer({ port: issuerPort++ });
-  const db = `topics-test-${Math.random().toString(36).slice(2, 10)}`;
+  const db = `relay-test-${Math.random().toString(36).slice(2, 10)}`;
   try {
     run(['publish', '-s', SERVER, db, '--module-path', 'module', '-y']);
   } catch (e) {
     iss.stop();
     throw new Error(`could not publish to SpacetimeDB "${SERVER}" — is \`spacetime start\` running?\n${e}`);
   }
-  run(['call', '-s', SERVER, db, 'set_config', iss.issuer, 'ONBOARDED', 'kerits.policySAIDs', '["topics-dev"]']);
+  run(['call', '-s', SERVER, db, 'set_config', iss.issuer, 'ONBOARDED', 'kerits.policySAIDs', '["relay-dev"]']);
   return {
     uri: URI,
     db,

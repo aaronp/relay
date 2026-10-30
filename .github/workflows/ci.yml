@@ -9,8 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # e2e tests publish throwaway databases to this local server
-      TOPICS_TEST_URI: ws://127.0.0.1:3000
-      TOPICS_TEST_SERVER: local
+      RELAY_TEST_URI: ws://127.0.0.1:3000
+      RELAY_TEST_SERVER: local
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -47,6 +47,21 @@ jobs:
       # Must be the token of the identity that first published the database (it owns it and is its admin).
       - run: spacetime login --token "${{ secrets.SPACETIME_TOKEN }}"
       - run: make deploy DEPLOY_DB="${{ vars.SPACETIME_DB || 'aaronp-relay' }}"
+
+  # Releases the client and CLI to npm, once the module the client was generated from is live.
+  # A no-op until a package.json version is bumped.
+  publish:
+    needs: deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    concurrency: publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: make publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # The web reference UI, at https://<owner>.github.io/<repo>/ (Settings → Pages → Source: GitHub Actions).
   pages:

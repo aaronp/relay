@@ -2,7 +2,7 @@
 // the client_id, so the port must stay the same between runs for refresh tokens to keep working.
 import {
   authorizeUrl, createPkce, discover, exchangeCode, parseCallback, refreshTokens, type Tokens,
-} from '@topics/client';
+} from '@aaronp/relay-client';
 import type { Config } from './config';
 
 const clientId = (cfg: Config) => `http://127.0.0.1:${cfg.port}`;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { connect, decodeClaims, type Client, type TopicInfo, type Tokens } from '@topics/client';
+import { connect, decodeClaims, type Client, type TopicInfo, type Tokens } from '@aaronp/relay-client';
 import { ConnectionPane, type Claims } from './ConnectionPane';
 import { TopicPane } from './TopicPane';
 import { TopicsPane } from './TopicsPane';

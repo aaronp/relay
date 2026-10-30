@@ -36,8 +36,8 @@ test('missingMessage', () => {
 });
 
 test('audienceAllowed', () => {
-  expect(audienceAllowed(['topics-cli'], [])).toBe(true); // empty allow-list = any (dev)
-  expect(audienceAllowed(['topics-cli'], ['topics-cli', 'https://web'])).toBe(true);
-  expect(audienceAllowed(['https://evil.example'], ['topics-cli'])).toBe(false);
-  expect(audienceAllowed([], ['topics-cli'])).toBe(false);
+  expect(audienceAllowed(['relay-cli'], [])).toBe(true); // empty allow-list = any (dev)
+  expect(audienceAllowed(['relay-cli'], ['relay-cli', 'https://web'])).toBe(true);
+  expect(audienceAllowed(['https://evil.example'], ['relay-cli'])).toBe(false);
+  expect(audienceAllowed([], ['relay-cli'])).toBe(false);
 });
