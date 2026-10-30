@@ -10,7 +10,8 @@ export { setGlobalLogLevel as setLogLevel } from 'spacetimedb';
 export type ConnectOptions = {
   uri: string;
   db: string;
-  token: string;
+  /** Omit to connect anonymously; only accepted while the server has auth disabled (dev). */
+  token?: string;
   /** Called when the token expires. Return a fresh token to reconnect (watches resume), or undefined to stop. */
   onExpired?: () => Promise<string | undefined>;
 };
@@ -53,7 +54,7 @@ const toEnvelope = (m: MessageRow): Envelope => ({
 });
 
 /** Opens a connection; rejects with the server's reason (bad issuer, expired token, ...). */
-function open(opts: ConnectOptions, token: string, onLost: () => void): Promise<DbConnection> {
+function open(opts: ConnectOptions, token: string | undefined, onLost: () => void): Promise<DbConnection> {
   return new Promise((resolve, reject) => {
     let connected = false;
     DbConnection.builder()
@@ -84,10 +85,10 @@ export class Client {
   /** Resolves when the client stops for good: token expired without refresh, or close()/connection lost. */
   readonly closed = new Promise<'expired' | 'closed'>(r => (this.#settle = r));
 
-  private constructor(public conn: DbConnection, opts: ConnectOptions, token: string) {
+  private constructor(public conn: DbConnection, opts: ConnectOptions, token: string | undefined) {
     this.#opts = opts;
     this.#resetGone();
-    this.#armExpiry(token);
+    if (token) this.#armExpiry(token);
   }
 
   static async connect(opts: ConnectOptions): Promise<Client> {
@@ -130,6 +131,11 @@ export class Client {
       writePolicies: t.writePolicies,
       expiresAt: t.expiresAt ? toDate(t.expiresAt) : undefined,
     }));
+  }
+
+  /** True when the server has every auth check turned off (dev mode). */
+  async authDisabled(): Promise<boolean> {
+    return this.#snapshot('SELECT * FROM auth_mode', () => !!this.conn.db.authMode.id.find(0)?.disabled);
   }
 
   /** Messages you're allowed to read, oldest first. Rejects if the topic doesn't exist; empty if you lack the read policy. */

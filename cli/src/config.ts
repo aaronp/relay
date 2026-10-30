@@ -11,13 +11,15 @@ export type Config = {
   refreshToken?: string;
   /** true when the token came from TOPICS_TOKEN (don't refresh or persist it) */
   tokenFromEnv?: boolean;
+  /** --no-auth / TOPICS_NO_AUTH=1: connect without a token (server must have auth disabled). Never persisted. */
+  noAuth?: boolean;
 };
 
-type Stored = Partial<Omit<Config, 'tokenFromEnv'>>;
+type Stored = Partial<Omit<Config, 'tokenFromEnv' | 'noAuth'>>;
 
 const DEFAULTS = {
   server: 'wss://maincloud.spacetimedb.com',
-  db: 'topics',
+  db: 'relay',
   issuer: 'https://oauth.kerits.id',
   port: 7863,
 };
@@ -29,7 +31,7 @@ function readStored(): Stored {
 }
 
 /** Precedence: flag > env > config file > defaults. */
-export function loadConfig(flags: { server?: string; db?: string; issuer?: string; port?: string }): Config {
+export function loadConfig(flags: { server?: string; db?: string; issuer?: string; port?: string; 'no-auth'?: boolean }): Config {
   const s = readStored();
   const env = process.env;
   const envToken = env.TOPICS_TOKEN;
@@ -41,12 +43,13 @@ export function loadConfig(flags: { server?: string; db?: string; issuer?: strin
     token: envToken ?? s.token,
     refreshToken: envToken ? undefined : s.refreshToken,
     tokenFromEnv: !!envToken,
+    noAuth: flags['no-auth'] ?? env.TOPICS_NO_AUTH === '1',
   };
 }
 
 /** Persists server/db/issuer/port and tokens, mode 0600 (it holds bearer tokens). */
 export function saveConfig(cfg: Config) {
-  const { tokenFromEnv: _, ...stored } = cfg;
+  const { tokenFromEnv: _, noAuth: __, ...stored } = cfg;
   mkdirSync(dirname(file()), { recursive: true, mode: 0o700 });
   writeFileSync(file(), JSON.stringify(stored, null, 2), { mode: 0o600 });
   chmodSync(file(), 0o600);

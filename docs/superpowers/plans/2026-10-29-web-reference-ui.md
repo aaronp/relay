@@ -237,7 +237,7 @@ test('displayPayload', () => {
 - `Makefile`: `web:` → `bun run --cwd web dev`. Add it to `.PHONY`.
 - README "Web UI" section:
   - `make dev`, publish, then `set_config` with `trustedIssuer = <wallet URL>` and `allowedAudiences` including `http://127.0.0.1:5173`
-  - `make web`, then open `http://127.0.0.1:5173`
+  - `make ui`, then open `http://127.0.0.1:5173`
   - Tokens are kept in localStorage (dev tool).
   - Wallet servers other than kerits must allow CORS from that origin.
 
@@ -248,7 +248,7 @@ test('displayPayload', () => {
 - [ ] **Step 5: Run** `bun run --cwd web build && bun run test`. Expected: tsc clean, vite build OK, all unit tests PASS.
 - [ ] **Step 6: Manual check.** It needs a wallet, so the user does it.
   1. `make dev`, publish, and `set_config` for kerits + `http://127.0.0.1:5173`.
-  2. `make web`, then Authenticate. The token panel shows your sub and SAIDs.
+  2. `make ui`, then Authenticate. The token panel shows your sub and SAIDs.
   3. Create a group, create a topic with your SAIDs, Load topics, and check the badges.
   4. Send, Pull, then Stream from a second tab.
   5. Send without the write SAID and expect the verbatim "send requires one of [...]".

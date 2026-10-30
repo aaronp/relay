@@ -12,7 +12,8 @@ const USAGE = `usage:
   chat topic list --group <g>
   chat send --topic <g.t> (-m <text> | --file <path>)
   chat pull --topic <g.t> [--watch] [--json]
-options: --server <ws(s)://...> --db <name> --issuer <url> --port <loopback port>`;
+options: --server <ws(s)://...> --db <name> --issuer <url> --port <loopback port>
+         --no-auth (or TOPICS_NO_AUTH=1): no token; only works while the server has auth disabled`;
 
 setLogLevel('warn'); // keep stdout clean for piping
 
@@ -27,6 +28,7 @@ const { values: o, positionals: [cmd, sub] } = parseArgs({
     message: { type: 'string', short: 'm' }, file: { type: 'string' },
     watch: { type: 'boolean' }, json: { type: 'boolean' },
     server: { type: 'string' }, db: { type: 'string' }, issuer: { type: 'string' }, port: { type: 'string' },
+    'no-auth': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -49,6 +51,7 @@ async function freshToken(cfg: Config): Promise<string> {
 }
 
 async function client(cfg: Config): Promise<Client> {
+  if (cfg.noAuth) return connect({ uri: cfg.server, db: cfg.db });
   return connect({
     uri: cfg.server,
     db: cfg.db,

@@ -7,6 +7,7 @@ import { Field, Status, useAction } from './ui';
 type Props = {
   client: Client | null;
   claims: Claims | null;
+  authOff: boolean;
   group: string;
   onGroup: (g: string) => void;
   topics: TopicInfo[];
@@ -15,7 +16,7 @@ type Props = {
   onSelect: (t: TopicInfo) => void;
 };
 
-export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, selected, onSelect }: Props) {
+export function TopicsPane({ client, claims, authOff, group, onGroup, topics, onTopics, selected, onSelect }: Props) {
   const [createTopicSaids, setCreateTopicSaids] = useState('');
   const [topicName, setTopicName] = useState('');
   const [readSaids, setReadSaids] = useState('');
@@ -24,6 +25,7 @@ export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, s
   const createGroup = useAction();
   const load = useAction();
   const createTopic = useAction();
+  const openTopic = useAction();
 
   const need = () => {
     if (!client) throw new Error('not connected');
@@ -54,7 +56,7 @@ export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, s
 
       <ul className="topics">
         {topics.map(t => {
-          const access = claims ? topicAccess(claims, t) : { read: false, write: false };
+          const access = authOff ? { read: true, write: true } : claims ? topicAccess(claims, t) : { read: false, write: false };
           return (
             <li key={t.address} className={t.address === selected ? 'selected' : ''} onClick={() => onSelect(t)}>
               <strong>{t.name}</strong>
@@ -72,7 +74,7 @@ export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, s
       </ul>
 
       <fieldset>
-        <legend>Create topic in “{group || '…'}”</legend>
+        <legend>Create or connect topic in “{group || '…'}”</legend>
         <Field label="Topic name" value={topicName} onChange={setTopicName} placeholder="foo" />
         <Field label="read policy SAIDs" value={readSaids} onChange={setReadSaids} placeholder="SAID1, SAID2" />
         <Field label="write policy SAIDs" value={writeSaids} onChange={setWriteSaids} placeholder="SAID1" />
@@ -87,7 +89,17 @@ export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, s
           await reload();
           return `created topic ${addr}`;
         })}>Create topic</button>
+        {' '}
+        <button disabled={openTopic.busy} onClick={() => openTopic.run(async () => {
+          const ts = await need().listTopics(group.trim());
+          onTopics(ts);
+          const t = ts.find(t => t.name === topicName.trim());
+          if (!t) throw new Error(`no such topic ${group.trim()}.${topicName.trim()}`);
+          onSelect(t);
+          return `opened ${t.address}`;
+        })}>Connect topic</button>
         <Status a={createTopic} />
+        <Status a={openTopic} />
       </fieldset>
     </section>
   );

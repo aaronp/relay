@@ -27,12 +27,12 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 ```sh
 bun install
 spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server entry
-spacetime publish -s local topics --module-path module -y
+spacetime publish -s local relay --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local topics set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
+spacetime call -s local relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
 
-export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=topics
+export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=relay
 export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
 alias chat='bun cli/src/main.ts'
 
@@ -60,10 +60,10 @@ server errors are shown word for word.
 
 ```sh
 make dev                                              # SpacetimeDB on 127.0.0.1:3010
-spacetime publish -s local topics --module-path module -y
-spacetime call -s local topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+spacetime publish -s local relay --module-path module -y
+spacetime call -s local relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:5173"]'
-make web                                              # then open http://127.0.0.1:5173 (not localhost)
+make ui                                               # then open http://127.0.0.1:5173 (not localhost)
 ```
 
 - **Authenticate with kerits** runs PKCE in the browser. The client id is the page origin,
@@ -71,11 +71,47 @@ make web                                              # then open http://127.0.0
   `allowedAudiences`, and set `trustedIssuer` to the wallet server URL you use.
 - Wallet servers other than kerits must allow CORS from `http://127.0.0.1:5173` on discovery and `/token`.
   kerits already does.
-- The settings and tokens (including the refresh token) are kept in `localStorage`. That's fine for a local
-  dev tool, but don't host it like this.
+- The settings and tokens (including the refresh token) are kept in `localStorage`.
 - SpacetimeDB URL and database changes apply when you click **Reconnect**.
 - The "can read / can write" badges compare your token's SAIDs with each topic's policies (owner always
   passes). An empty Pull on a readable-looking topic just means no messages.
+
+### Hosted on GitHub Pages
+
+CI's `pages` job publishes the UI to https://aaronp.github.io/relay/ after every passing push to `master`.
+There it connects to `wss://maincloud.spacetimedb.com` and the `relay` database by default.
+
+One-time setup:
+- In the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
+- Add the Pages origin to the deployed database's audiences:
+  `spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs '["http://127.0.0.1:7863", "https://aaronp.github.io"]'`
+
+On the hosted page:
+- The kerits client id is `https://aaronp.github.io`, and the redirect is `/relay/callback`. Pages serves the
+  app as `404.html` for that path, so the redirect still loads the app.
+- **Security caveat:** every `aaronp.github.io/*` site shares that origin, so they also share its
+  `localStorage` (which holds the tokens) and its kerits client id. That's fine for a test page. For anything
+  real, use a custom domain.
+
+## Auth off (dev)
+
+To try groups and topics without any tokens or SAIDs, switch auth off for one database:
+
+```sh
+make auth-off                  # = spacetime call -s local relay set_auth_disabled true (admin only)
+TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db relay   # or --no-auth
+make auth-on                   # back on; drops every session, so clients reconnect with a token
+```
+
+While it's off:
+- Any connection is accepted, with or without a token, and the issuer, audience and expiry aren't checked.
+- Your identity is the token's `sub` if you sent one, otherwise your SpacetimeDB identity (hex).
+- Every create and send passes, and everyone can read every topic.
+- Policies are still stored and listed, so you can set them (empty or not) and see them.
+
+Auth is on unless you switch it off. The web UI's **Connect without auth** button connects with no token.
+When auth is off, the web UI shows a red **AUTH DISABLED** banner and `make dev-status` says so too.
+Don't leave it off on maincloud.
 
 ## Tests
 
@@ -87,12 +123,31 @@ bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 m
 ## Deploy to maincloud
 
 ```sh
-spacetime publish -s maincloud topics --module-path module -y
-spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+make deploy                       # = spacetime publish -s maincloud relay --module-path module -y
+spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:7863", "https://<your web app origin>"]'
 ```
 
-Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topics --issuer https://oauth.kerits.id`).
+`set_config` is only needed after the first deploy. Later deploys keep the data and config. A schema change
+that would delete data is refused instead of applied. To deploy somewhere else, use
+`make deploy DEPLOY_SERVER=… DEPLOY_DB=…`.
+
+To undeploy, run `make undeploy`. It runs `spacetime delete -s maincloud relay`, which deletes the database
+and all of its data, and asks you to confirm first. If CI deploys still run on `master`, the next one creates
+the database again, empty. To stop that, disable the workflow or remove the `SPACETIME_TOKEN` secret.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request. It runs the unit tests and builds the web UI, then
+starts a local SpacetimeDB and runs the e2e tests. If everything passes on a push to `master`, it runs
+`make deploy` against maincloud.
+
+Before the first CI deploy, set up the GitHub repo:
+- **Secret `SPACETIME_TOKEN`:** the token from `spacetime login show --token`. Use the identity that first
+  published the database, because it owns the database and is its admin.
+- **Variable `SPACETIME_DB`** (optional): the database name. The default is `relay`.
+
+Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db relay --issuer https://oauth.kerits.id`).
 
 ## CLI auth
 
@@ -113,7 +168,7 @@ import { connect } from '@topics/client';
 
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',
-  db: 'topics',
+  db: 'relay',
   token,                                     // kerits JWT
   onExpired: async () => getFreshToken(),    // optional; return undefined to stop
 });

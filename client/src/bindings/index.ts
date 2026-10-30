@@ -37,11 +37,13 @@ import {
 import CreateGroupReducer from "./create_group_reducer";
 import CreateTopicReducer from "./create_topic_reducer";
 import SendReducer from "./send_reducer";
+import SetAuthDisabledReducer from "./set_auth_disabled_reducer";
 import SetConfigReducer from "./set_config_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AuthModeRow from "./auth_mode_table";
 import GroupRow from "./group_table";
 import MyMessagesRow from "./my_messages_table";
 import MySessionRow from "./my_session_table";
@@ -51,6 +53,17 @@ import TopicRow from "./topic_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  authMode: __table({
+    name: 'auth_mode',
+    indexes: [
+      { accessor: 'id', name: 'auth_mode_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'auth_mode_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AuthModeRow),
   group: __table({
     name: 'group',
     indexes: [
@@ -101,6 +114,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_group", CreateGroupReducer),
   __reducerSchema("create_topic", CreateTopicReducer),
   __reducerSchema("send", SendReducer),
+  __reducerSchema("set_auth_disabled", SetAuthDisabledReducer),
   __reducerSchema("set_config", SetConfigReducer),
 );
 

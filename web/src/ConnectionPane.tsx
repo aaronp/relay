@@ -9,6 +9,10 @@ type Props = {
   onSettings: (s: Settings) => void;
   claims: Claims | null;
   connection: 'connected' | 'connecting' | 'disconnected';
+  anonymous: boolean;
+  /** Server reports every auth check turned off. */
+  authOff: boolean;
+  onAnonymous: () => void;
   notice?: string;
   onReconnect: () => void;
   onSignOut: () => void;
@@ -30,7 +34,9 @@ function remaining(exp: number, now: number) {
   return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
 }
 
-export function ConnectionPane({ settings, onSettings, claims, connection, notice, onReconnect, onSignOut }: Props) {
+export function ConnectionPane({
+  settings, onSettings, claims, connection, anonymous, authOff, onAnonymous, notice, onReconnect, onSignOut,
+}: Props) {
   const login = useAction();
   const now = useNow();
   const set = (k: keyof Settings) => (v: string) => onSettings({ ...settings, [k]: v });
@@ -38,6 +44,7 @@ export function ConnectionPane({ settings, onSettings, claims, connection, notic
   return (
     <section className="pane">
       <h2>Connection</h2>
+      {authOff && <div className="banner">AUTH DISABLED on this database — anyone can create, send and read</div>}
       <Field label="Wallet server" value={settings.walletUrl} onChange={set('walletUrl')} />
       <Field label="SpacetimeDB" value={settings.server} onChange={set('server')} />
       <Field label="Database" value={settings.db} onChange={set('db')} />
@@ -45,14 +52,20 @@ export function ConnectionPane({ settings, onSettings, claims, connection, notic
         <button disabled={login.busy} onClick={() => login.run(() => beginLogin(settings))}>
           {claims ? 'Re-authenticate' : 'Authenticate with kerits'}
         </button>
-        {claims && <button onClick={onReconnect}>Reconnect</button>}
-        {claims && <button onClick={onSignOut}>Sign out</button>}
+        {!claims && !anonymous && <button onClick={onAnonymous}>Connect without auth</button>}
+        {(claims || anonymous) && <button onClick={onReconnect}>Reconnect</button>}
+        {(claims || anonymous) && <button onClick={onSignOut}>Sign out</button>}
       </div>
       <Status a={login} />
       {notice && <div className="error">{notice}</div>}
 
       <h3>Token</h3>
-      {claims ? (
+      {anonymous ? (
+        <dl className="claims">
+          <dt>token</dt><dd><em>none (anonymous)</em></dd>
+          <dt>connection</dt><dd className={connection}>{connection}</dd>
+        </dl>
+      ) : claims ? (
         <dl className="claims">
           <dt>sub</dt><dd><code>{claims.sub}</code></dd>
           <dt>policy SAIDs</dt>

@@ -29,6 +29,8 @@ export async function setup() {
     uri: URI,
     db,
     issuer: iss,
+    /** Calls a reducer as the publisher (admin). */
+    admin: (reducer: string, ...args: string[]) => run(['call', '-s', SERVER, db, reducer, ...args]),
     tokenFor: (sub: string, saids: string[], ttlSec = 3600) => iss.mint({ sub, saids, ttlSec }),
     teardown() {
       iss.stop();
