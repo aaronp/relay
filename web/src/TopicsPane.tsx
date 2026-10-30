@@ -25,6 +25,7 @@ export function TopicsPane({ client, claims, authOff, group, onGroup, topics, on
   const createGroup = useAction();
   const load = useAction();
   const createTopic = useAction();
+  const openTopic = useAction();
 
   const need = () => {
     if (!client) throw new Error('not connected');
@@ -73,7 +74,7 @@ export function TopicsPane({ client, claims, authOff, group, onGroup, topics, on
       </ul>
 
       <fieldset>
-        <legend>Create topic in “{group || '…'}”</legend>
+        <legend>Create or connect topic in “{group || '…'}”</legend>
         <Field label="Topic name" value={topicName} onChange={setTopicName} placeholder="foo" />
         <Field label="read policy SAIDs" value={readSaids} onChange={setReadSaids} placeholder="SAID1, SAID2" />
         <Field label="write policy SAIDs" value={writeSaids} onChange={setWriteSaids} placeholder="SAID1" />
@@ -88,7 +89,17 @@ export function TopicsPane({ client, claims, authOff, group, onGroup, topics, on
           await reload();
           return `created topic ${addr}`;
         })}>Create topic</button>
+        {' '}
+        <button disabled={openTopic.busy} onClick={() => openTopic.run(async () => {
+          const ts = await need().listTopics(group.trim());
+          onTopics(ts);
+          const t = ts.find(t => t.name === topicName.trim());
+          if (!t) throw new Error(`no such topic ${group.trim()}.${topicName.trim()}`);
+          onSelect(t);
+          return `opened ${t.address}`;
+        })}>Connect topic</button>
         <Status a={createTopic} />
+        <Status a={openTopic} />
       </fieldset>
     </section>
   );
