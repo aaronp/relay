@@ -19,7 +19,7 @@ type Stored = Partial<Omit<Config, 'tokenFromEnv' | 'noAuth'>>;
 
 const DEFAULTS = {
   server: 'wss://maincloud.spacetimedb.com',
-  db: 'topics',
+  db: 'relay',
   issuer: 'https://oauth.kerits.id',
   port: 7863,
 };

@@ -27,12 +27,12 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 ```sh
 bun install
 spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server entry
-spacetime publish -s local topics --module-path module -y
+spacetime publish -s local relay --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local topics set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
+spacetime call -s local relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
 
-export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=topics
+export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=relay
 export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
 alias chat='bun cli/src/main.ts'
 
@@ -60,8 +60,8 @@ server errors are shown word for word.
 
 ```sh
 make dev                                              # SpacetimeDB on 127.0.0.1:3010
-spacetime publish -s local topics --module-path module -y
-spacetime call -s local topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+spacetime publish -s local relay --module-path module -y
+spacetime call -s local relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:5173"]'
 make ui                                               # then open http://127.0.0.1:5173 (not localhost)
 ```
@@ -82,8 +82,8 @@ make ui                                               # then open http://127.0.0
 To try groups and topics without any tokens or SAIDs, switch auth off for one database:
 
 ```sh
-make auth-off                  # = spacetime call -s local topics set_auth_disabled true (admin only)
-TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db topics   # or --no-auth
+make auth-off                  # = spacetime call -s local relay set_auth_disabled true (admin only)
+TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db relay   # or --no-auth
 make auth-on                   # back on; drops every session, so clients reconnect with a token
 ```
 
@@ -107,8 +107,8 @@ bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 m
 ## Deploy to maincloud
 
 ```sh
-make deploy                       # = spacetime publish -s maincloud topics --module-path module -y
-spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+make deploy                       # = spacetime publish -s maincloud relay --module-path module -y
+spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:7863", "https://<your web app origin>"]'
 ```
 
@@ -125,9 +125,9 @@ starts a local SpacetimeDB and runs the e2e tests. If everything passes on a pus
 Before the first CI deploy, set up the GitHub repo:
 - **Secret `SPACETIME_TOKEN`:** the token from `spacetime login show --token`. Use the identity that first
   published the database, because it owns the database and is its admin.
-- **Variable `SPACETIME_DB`** (optional): the database name. The default is `topics`.
+- **Variable `SPACETIME_DB`** (optional): the database name. The default is `relay`.
 
-Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topics --issuer https://oauth.kerits.id`).
+Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db relay --issuer https://oauth.kerits.id`).
 
 ## CLI auth
 
@@ -148,7 +148,7 @@ import { connect } from '@topics/client';
 
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',
-  db: 'topics',
+  db: 'relay',
   token,                                     // kerits JWT
   onExpired: async () => getFreshToken(),    // optional; return undefined to stop
 });

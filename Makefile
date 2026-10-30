@@ -1,11 +1,11 @@
 # Local SpacetimeDB listens where the CLI's `local` server entry points (port 3000 is often taken).
 LISTEN ?= 127.0.0.1:3010
 SERVER ?= local
-DB     ?= topics
+DB     ?= relay
 UI_PORT ?= 5173
 # Where `make deploy` publishes.
 DEPLOY_SERVER ?= maincloud
-DEPLOY_DB     ?= topics
+DEPLOY_DB     ?= relay
 
 .PHONY: dev stop dev-status build ui auth-off auth-on deploy
 

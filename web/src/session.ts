@@ -13,7 +13,7 @@ const MIN_VALIDITY_MS = 30_000; // don't connect with a token that's about to la
 const KEY = 'topics-web';
 const PENDING = 'topics-web-pending';
 
-const DEFAULTS: Settings = { walletUrl: 'https://oauth.kerits.id', server: 'ws://127.0.0.1:3010', db: 'topics' };
+const DEFAULTS: Settings = { walletUrl: 'https://oauth.kerits.id', server: 'ws://127.0.0.1:3010', db: 'relay' };
 
 type Stored = { settings?: Partial<Settings>; tokens?: Tokens | null };
 type Pending = { verifier: string; state: string; walletUrl: string };
