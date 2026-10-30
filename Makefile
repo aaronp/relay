@@ -7,7 +7,7 @@ UI_PORT ?= 5173
 DEPLOY_SERVER ?= maincloud
 DEPLOY_DB     ?= aaronp-relay
 
-.PHONY: dev stop dev-status build ui auth-off auth-on deploy undeploy
+.PHONY: dev stop dev-status build ui auth-off auth-on deploy undeploy show-token
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -60,3 +60,8 @@ deploy:
 ## Delete $(DEPLOY_DB) on $(DEPLOY_SERVER) and ALL its data (spacetime asks you to confirm).
 undeploy:
 	spacetime delete -s $(DEPLOY_SERVER) $(DEPLOY_DB)
+
+## Print just the SpacetimeDB CLI login token (no prose) — the value for the SPACETIME_TOKEN CI secret.
+## e.g. make -s show-token | gh secret set SPACETIME_TOKEN
+show-token:
+	@spacetime login show --token | awk '/auth token/ {printf "%s", $$NF}'
