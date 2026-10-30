@@ -23,6 +23,8 @@ export function App() {
   // Kept apart from `notice` so a connect that succeeds with the old token can't erase a failed sign-in.
   const [authError, setAuthError] = useState<string>();
   const [session, setSession] = useState(0); // bump to (re)connect
+  const [anonymous, setAnonymous] = useState(false); // connect without a token (server must have auth disabled)
+  const [authOff, setAuthOff] = useState(false);
   const [group, setGroup] = useState('');
   const [topics, setTopics] = useState<TopicInfo[]>([]);
   const [selected, setSelected] = useState<TopicInfo>();
@@ -30,18 +32,20 @@ export function App() {
   tokensRef.current = tokens;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const anonymousRef = useRef(anonymous);
+  anonymousRef.current = anonymous;
 
   useEffect(() => {
     if (window.location.pathname !== '/callback' || callbackHandled) return;
     callbackHandled = true;
     completeLogin(window.location.href)
-      .then(t => { setAuthError(undefined); setTokens(t); setSession(n => n + 1); })
+      .then(t => { setAuthError(undefined); setAnonymous(false); setTokens(t); setSession(n => n + 1); })
       .catch(e => setAuthError(`sign-in failed: ${e instanceof Error ? e.message : e}`));
   }, []);
 
   useEffect(() => {
-    const t = tokensRef.current;
-    if (!t) return;
+    const t = anonymousRef.current ? null : tokensRef.current;
+    if (!t && !anonymousRef.current) return;
     let cancelled = false;
     let c: Client | undefined;
     let refreshError: string | undefined;
@@ -51,7 +55,14 @@ export function App() {
       setTokens(null);
       setNotice(`signed out — ${why}`);
     };
-    usableTokens(settingsRef.current, t).then(tok => {
+    const connectFailed = (e: unknown) => {
+      if (cancelled) return;
+      setConnection('disconnected');
+      setNotice(`connect failed: ${e instanceof Error ? e.message : e}`);
+    };
+    if (!t) {
+      connect({ uri: settings.server, db: settings.db }).then(onConnected).catch(connectFailed);
+    } else usableTokens(settingsRef.current, t).then(tok => {
       if (cancelled) return;
       if (tok !== t) setTokens(tok);
       return connect({
@@ -69,17 +80,14 @@ export function App() {
       if (cancelled) return;
       setConnection('disconnected');
       signedOut(e instanceof Error ? e.message : String(e));
-    }).catch(e => {
-      if (cancelled) return;
-      setConnection('disconnected');
-      setNotice(`connect failed: ${e instanceof Error ? e.message : e}`);
-    });
+    }).catch(connectFailed);
     function onConnected(conn: Client) {
       if (cancelled) return conn.close();
       c = conn;
       setClient(conn);
       setConnection('connected');
       setNotice(undefined);
+      conn.authDisabled().then(off => !cancelled && setAuthOff(off), () => {});
       conn.closed.then(why => {
         if (cancelled) return;
         setClient(null);
@@ -91,7 +99,7 @@ export function App() {
         }
       });
     }
-    return () => { cancelled = true; c?.close(); setClient(null); };
+    return () => { cancelled = true; c?.close(); setClient(null); setAuthOff(false); };
     // settings changes apply on Reconnect, not on every keystroke
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
@@ -103,15 +111,19 @@ export function App() {
         onSettings={s => { setSettings(s); saveSettings(s); }}
         claims={claimsOf(tokens)}
         connection={connection}
+        anonymous={anonymous}
+        authOff={authOff}
+        onAnonymous={() => { setAuthError(undefined); setAnonymous(true); setSession(n => n + 1); }}
         notice={[authError, notice].filter(Boolean).join('\n') || undefined}
         onReconnect={() => { setAuthError(undefined); setSession(n => n + 1); }}
         onSignOut={() => {
-          saveTokens(null); setTokens(null); setSession(n => n + 1); setNotice(undefined); setAuthError(undefined);
+          saveTokens(null); setTokens(null); setAnonymous(false); setSession(n => n + 1); setNotice(undefined); setAuthError(undefined);
         }}
       />
       <TopicsPane
         client={client}
-        claims={claimsOf(tokens)}
+        claims={anonymous ? null : claimsOf(tokens)}
+        authOff={authOff}
         group={group}
         onGroup={setGroup}
         topics={topics}

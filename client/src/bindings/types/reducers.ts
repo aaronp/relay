@@ -9,10 +9,12 @@ import { type Infer as __Infer } from "spacetimedb";
 import CreateGroupReducer from "../create_group_reducer";
 import CreateTopicReducer from "../create_topic_reducer";
 import SendReducer from "../send_reducer";
+import SetAuthDisabledReducer from "../set_auth_disabled_reducer";
 import SetConfigReducer from "../set_config_reducer";
 
 export type CreateGroupParams = __Infer<typeof CreateGroupReducer>;
 export type CreateTopicParams = __Infer<typeof CreateTopicReducer>;
 export type SendParams = __Infer<typeof SendReducer>;
+export type SetAuthDisabledParams = __Infer<typeof SetAuthDisabledReducer>;
 export type SetConfigParams = __Infer<typeof SetConfigReducer>;
 

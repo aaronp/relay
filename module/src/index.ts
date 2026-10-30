@@ -19,6 +19,12 @@ const config = table(
   }
 );
 
+// Dev switch: a row with disabled=true turns off every auth check (no row = auth on). Public so clients can warn.
+const authMode = table(
+  { name: 'auth_mode', public: true },
+  { id: t.u32().primaryKey(), disabled: t.bool() }
+);
+
 // Claims captured at connect: views can't see JWTs, so reads are filtered through this.
 const session = table(
   { name: 'session' },
@@ -77,18 +83,28 @@ const sweepTimer = table(
   }
 );
 
-const spacetimedb = schema({ config, session, group, topic, message, sweepTimer });
+const spacetimedb = schema({ config, authMode, session, group, topic, message, sweepTimer });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
 const getConfig = (ctx: Ctx) => ctx.db.config.id.find(0)!;
+const authDisabled = (ctx: { db: { authMode: { id: { find(id: number): { disabled: boolean } | null | undefined } } } }) =>
+  !!ctx.db.authMode.id.find(0)?.disabled;
+const FOREVER = new Timestamp(2n ** 62n);
 
 /** Verified-issuer, unexpired JWT claims for the caller, or throws. */
 function callerClaims(ctx: Ctx) {
   const jwt = ctx.senderAuth.jwt;
-  if (!jwt) throw new SenderError('a JWT is required');
   const cfg = getConfig(ctx);
+  // Auth off: anyone, with or without a token; identity is the token's sub if there is one.
+  if (authDisabled(ctx))
+    return {
+      sub: jwt?.subject ?? ctx.sender.toHexString(),
+      saids: jwt ? readPolicySaids(jwt.fullPayload, cfg.policyClaim) : [],
+      expiresAt: FOREVER,
+    };
+  if (!jwt) throw new SenderError('a JWT is required');
   if (jwt.issuer !== cfg.trustedIssuer) throw new SenderError(`untrusted issuer ${jwt.issuer}`);
   // Without this, a token kerits issued to any other app (same sub + SAIDs) would work here.
   if (!audienceAllowed(jwt.audience, cfg.allowedAudiences))
@@ -106,7 +122,7 @@ type Action = 'create_group' | 'create_topic' | 'send';
 // ponytail: policy match only; rate limits / quotas per subject go here when needed.
 function authorize(ctx: Ctx, action: Action, target: { required: string[]; owner?: string }) {
   const claims = callerClaims(ctx);
-  if (claims.sub !== target.owner && !satisfies(claims.saids, target.required))
+  if (!authDisabled(ctx) && claims.sub !== target.owner && !satisfies(claims.saids, target.required))
     throw new SenderError(missingMessage(action, target.required));
   return claims;
 }
@@ -160,6 +176,16 @@ export const setConfig = spacetimedb.reducer(
     ctx.db.config.id.update({ ...cfg, ...args });
   }
 );
+
+/** Dev only: turns every auth check off (true) or back on (false). Re-enabling drops all sessions. */
+export const setAuthDisabled = spacetimedb.reducer({ disabled: t.bool() }, (ctx, { disabled }) => {
+  if (!ctx.sender.isEqual(getConfig(ctx).admin)) throw new SenderError('admin only');
+  const row = { id: 0, disabled };
+  if (ctx.db.authMode.id.find(0)) ctx.db.authMode.id.update(row);
+  else ctx.db.authMode.insert(row);
+  // Sessions opened while auth was off would otherwise keep reading; everyone reconnects to get one back.
+  if (!disabled) for (const s of [...ctx.db.session.iter()]) ctx.db.session.identity.delete(s.identity);
+});
 
 export const createGroup = spacetimedb.reducer(
   { name: t.string(), createTopicPolicies: t.array(t.string()) },
@@ -237,6 +263,7 @@ export const myMessages = spacetimedb.view(
   ctx => {
     const s = ctx.db.session.identity.find(ctx.sender);
     if (!s) return [];
+    if (authDisabled(ctx)) return [...ctx.db.message.iter()];
     return [...ctx.db.topic.iter()]
       .filter(tp => tp.owner === s.subject || satisfies(s.policySaids, tp.readPolicies))
       .flatMap(tp => [...ctx.db.message.topicId.filter(tp.id)]);

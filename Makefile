@@ -4,7 +4,7 @@ SERVER ?= local
 DB     ?= topics
 UI_PORT ?= 5173
 
-.PHONY: dev stop dev-status build ui
+.PHONY: dev stop dev-status build ui auth-off auth-on
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -28,6 +28,9 @@ dev-status:
 	else \
 		echo "  not published — run: spacetime publish -s $(SERVER) $(DB) --module-path module -y"; \
 	fi
+	@if spacetime sql -s $(SERVER) $(DB) "SELECT disabled FROM auth_mode" 2>/dev/null | grep -q true; then \
+		echo "  AUTH DISABLED — run: make auth-on"; \
+	fi
 	@spacetime server ping $(SERVER) >/dev/null 2>&1
 
 ## Build the standalone `chat` binary into dist/chat.
@@ -37,3 +40,11 @@ build:
 ## Start the web reference UI at http://127.0.0.1:5173 (fixed origin = kerits client_id).
 ui:
 	bun run --cwd web dev
+
+## Dev only: turn every auth check off for $(DB) on $(SERVER) (anyone can create, send and read; no token needed).
+auth-off:
+	spacetime call -s $(SERVER) $(DB) set_auth_disabled true
+
+## Turn auth back on (drops all sessions; clients reconnect with a token).
+auth-on:
+	spacetime call -s $(SERVER) $(DB) set_auth_disabled false

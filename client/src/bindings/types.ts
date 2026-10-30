@@ -10,6 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AuthMode = __t.object("AuthMode", {
+  id: __t.u32(),
+  disabled: __t.bool(),
+});
+export type AuthMode = __Infer<typeof AuthMode>;
+
 export const Config = __t.object("Config", {
   id: __t.u32(),
   admin: __t.identity(),

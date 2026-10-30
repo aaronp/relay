@@ -77,6 +77,26 @@ make ui                                               # then open http://127.0.0
 - The "can read / can write" badges compare your token's SAIDs with each topic's policies (owner always
   passes). An empty Pull on a readable-looking topic just means no messages.
 
+## Auth off (dev)
+
+To try groups and topics without any tokens or SAIDs, switch auth off for one database:
+
+```sh
+make auth-off                  # = spacetime call -s local topics set_auth_disabled true (admin only)
+TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db topics   # or --no-auth
+make auth-on                   # back on; drops every session, so clients reconnect with a token
+```
+
+While it's off:
+- Any connection is accepted, with or without a token, and the issuer, audience and expiry aren't checked.
+- Your identity is the token's `sub` if you sent one, otherwise your SpacetimeDB identity (hex).
+- Every create and send passes, and everyone can read every topic.
+- Policies are still stored and listed, so you can set them (empty or not) and see them.
+
+Auth is on unless you switch it off. The web UI's **Connect without auth** button connects with no token.
+When auth is off, the web UI shows a red **AUTH DISABLED** banner and `make dev-status` says so too.
+Don't leave it off on maincloud.
+
 ## Tests
 
 ```sh

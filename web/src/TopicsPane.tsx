@@ -7,6 +7,7 @@ import { Field, Status, useAction } from './ui';
 type Props = {
   client: Client | null;
   claims: Claims | null;
+  authOff: boolean;
   group: string;
   onGroup: (g: string) => void;
   topics: TopicInfo[];
@@ -15,7 +16,7 @@ type Props = {
   onSelect: (t: TopicInfo) => void;
 };
 
-export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, selected, onSelect }: Props) {
+export function TopicsPane({ client, claims, authOff, group, onGroup, topics, onTopics, selected, onSelect }: Props) {
   const [createTopicSaids, setCreateTopicSaids] = useState('');
   const [topicName, setTopicName] = useState('');
   const [readSaids, setReadSaids] = useState('');
@@ -54,7 +55,7 @@ export function TopicsPane({ client, claims, group, onGroup, topics, onTopics, s
 
       <ul className="topics">
         {topics.map(t => {
-          const access = claims ? topicAccess(claims, t) : { read: false, write: false };
+          const access = authOff ? { read: true, write: true } : claims ? topicAccess(claims, t) : { read: false, write: false };
           return (
             <li key={t.address} className={t.address === selected ? 'selected' : ''} onClick={() => onSelect(t)}>
               <strong>{t.name}</strong>
