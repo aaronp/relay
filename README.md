@@ -116,6 +116,10 @@ spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded 
 that would delete data is refused instead of applied. To deploy somewhere else, use
 `make deploy DEPLOY_SERVER=… DEPLOY_DB=…`.
 
+To undeploy, run `make undeploy`. It runs `spacetime delete -s maincloud relay`, which deletes the database
+and all of its data, and asks you to confirm first. If CI deploys still run on `master`, the next one creates
+the database again, empty. To stop that, disable the workflow or remove the `SPACETIME_TOKEN` secret.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on every push and pull request. It runs the unit tests and builds the web UI, then

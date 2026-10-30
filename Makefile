@@ -7,7 +7,7 @@ UI_PORT ?= 5173
 DEPLOY_SERVER ?= maincloud
 DEPLOY_DB     ?= relay
 
-.PHONY: dev stop dev-status build ui auth-off auth-on deploy
+.PHONY: dev stop dev-status build ui auth-off auth-on deploy undeploy
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -56,3 +56,7 @@ auth-on:
 ## migrations that would delete it. A first deploy also needs set_config (see README).
 deploy:
 	spacetime publish -s $(DEPLOY_SERVER) $(DEPLOY_DB) --module-path module -y
+
+## Delete $(DEPLOY_DB) on $(DEPLOY_SERVER) and ALL its data (spacetime asks you to confirm).
+undeploy:
+	spacetime delete -s $(DEPLOY_SERVER) $(DEPLOY_DB)
