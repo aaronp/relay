@@ -5,12 +5,16 @@ kerits policy SAIDs carried in JWTs from `https://oauth.kerits.id` (configurable
 bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. The server sets
 `sentAt`, `sender` (JWT `sub`) and `digest` (SHA-256 hex of the payload).
 
+- **Try it in the browser:** [aaronp.github.io/relay](https://aaronp.github.io/relay/), the hosted reference UI
+- **Use it from your app:** [`@pritzlaff/relay-client`](https://www.npmjs.com/package/@pritzlaff/relay-client), see [Library](#library)
+- **Use it from a terminal:** [`@pritzlaff/relay-cli`](https://www.npmjs.com/package/@pritzlaff/relay-cli), see [CLI](#cli)
+
 | Path | What |
 |---|---|
 | `module/` | SpacetimeDB module (TypeScript) |
 | `client/` | `@pritzlaff/relay-client`, browser + Bun library |
 | `cli/` | `relay` CLI |
-| `web/` | reference web UI (Vite + React), local only |
+| `web/` | reference web UI (Vite + React), [hosted on GitHub Pages](https://aaronp.github.io/relay/) |
 | `dev-issuer/` | local ES256 issuer for tests and dev (never for production) |
 | `e2e/` | end-to-end tests against a local SpacetimeDB |
 
@@ -175,24 +179,109 @@ and is never refreshed.
 The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAIDs` (flat key or nested
 `kerits.policySAIDs`). Otherwise it uses `id_token`.
 
+## CLI
+
+The CLI runs on [Bun](https://bun.sh).
+
+```sh
+bun install -g @pritzlaff/relay-cli
+relay --version
+
+# Point it at a server. These examples need auth disabled (see "Auth off"); otherwise run `relay auth` instead.
+export RELAY_SERVER=ws://127.0.0.1:3010 RELAY_DB=aaronp-relay RELAY_NO_AUTH=1
+
+relay group create --name demo
+relay topic create --name news --group demo --lifetime 7d
+relay topic list --group demo
+relay send --topic demo.news -m "hello"
+relay pull --topic demo.news            # read what's there, then exit
+relay pull --topic demo.news --watch    # keep streaming new messages (Ctrl-C to stop)
+```
+
 ## Library
+
+```sh
+bun add @pritzlaff/relay-client        # or: npm install @pritzlaff/relay-client
+```
+
+To try the script below, run a local server with auth disabled, from a checkout of this repo:
+
+```sh
+make dev                                                          # in one terminal
+spacetime publish -s local aaronp-relay --module-path module -y   # in another
+make auth-off
+```
+
+Save this as `relay-demo.ts` in your project and run `bun relay-demo.ts`. It creates the `demo` group, so a second
+run fails with an error unless you change the group name.
 
 ```ts
 import { connect } from '@pritzlaff/relay-client';
 
+const client = await connect({
+  uri: 'ws://127.0.0.1:3010',
+  db: 'aaronp-relay',
+  // token: '<kerits JWT>',    // leave out only while the server has auth disabled
+});
+
+const encode = (text: string) => new TextEncoder().encode(text);
+const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+
+// Create a group, then a topic in it. Topics are addressed as `group.topic`.
+await client.createGroup('demo', { createTopicPolicies: [] });
+await client.createTopic('demo.news', {
+  readPolicies: [],            // policy SAIDs allowed to read; empty means owner only
+  writePolicies: [],           // policy SAIDs allowed to write
+  lifetimeSecs: 86400,         // optional: the topic expires after a day
+});
+
+console.log(await client.listTopics('demo'));
+
+// Stream: existing messages first, then each new one as it arrives.
+let seen = 0;
+const allSeen = new Promise<void>(resolve => {
+  const stop = client.watch(
+    'demo.news',
+    msg => {
+      console.log(`stream: ${msg.sender} ${decode(msg.payload)}`);
+      if (++seen === 3) { stop(); resolve(); }
+    },
+    err => console.error('watch failed:', err.message),
+  );
+});
+
+// Send. Payloads are bytes, up to 64 KiB.
+await client.send('demo.news', encode('first'));
+await client.send('demo.news', encode('second'));
+await client.send('demo.news', encode('third'));
+
+// Pull: a one-off read, oldest first.
+const page = await client.pull('demo.news', { limit: 2 });
+console.log('pull:', page.map(msg => decode(msg.payload)));
+
+// Pull the next page by passing the last id you saw.
+const rest = await client.pull('demo.news', { afterId: page.at(-1)!.id });
+console.log('next:', rest.map(msg => decode(msg.payload)));
+
+await allSeen;
+client.close();
+```
+
+Against a server with auth on, pass a token and refresh it when it expires:
+
+```ts
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',
   db: 'aaronp-relay',
   token,                                     // kerits JWT
   onExpired: async () => getFreshToken(),    // optional; return undefined to stop
 });
-await client.createGroup('example', { createTopicPolicies: ['ABC1235'] });
-await client.createTopic('example.foo', { readPolicies: ['XYZ'], writePolicies: ['HKI'], lifetimeSecs: 86400 });
-await client.send('example.foo', new TextEncoder().encode('hello'));
-const msgs = await client.pull('example.foo', { afterId: 10n, limit: 50 });
-const stop = client.watch('example.foo', env => console.log(env.sender, env.payload));
-console.log(await client.closed);            // 'expired' | 'closed'
+console.log(await client.closed);            // resolves when the client stops: 'expired' | 'closed'
 ```
+
+In a TypeScript project, use `"moduleResolution": "bundler"` and leave `noUncheckedIndexedAccess` off, because the
+package's types are its TypeScript source. Vite 5's default build target rejects top-level `await`, so in a Vite
+app call `connect()` inside a function or set `build.target` to `esnext`.
 
 The library sends the JWT directly, not through the SDK's token exchange, because that exchange rewrites
 `exp` and the module needs the real expiry. In Bun and Node (22 or later, which have a global WebSocket)
