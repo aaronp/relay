@@ -143,7 +143,10 @@ starts a local SpacetimeDB and runs the e2e tests. If everything passes on a pus
 `make deploy` against maincloud.
 
 Before the first CI deploy, set up the GitHub repo:
-- **Secret `SPACETIME_TOKEN`:** the token from `spacetime login show --token`. Use the identity that first
+- **Secret `SPACETIME_TOKEN`:** just the token, not the whole output of `spacetime login show --token`.
+  Set it with
+  `spacetime login show --token | awk '/auth token/ {printf "%s", $NF}' | gh secret set SPACETIME_TOKEN`.
+  Use the identity that first
   published the database, because it owns the database and is its admin.
 - **Variable `SPACETIME_DB`** (optional): the database name. The default is `relay`.
 
