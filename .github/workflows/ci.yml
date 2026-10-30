@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # e2e tests publish throwaway databases to this local server
+      TOPICS_TEST_URI: ws://127.0.0.1:3000
+      TOPICS_TEST_SERVER: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install SpacetimeDB CLI
+        run: |
+          curl -sSf https://install.spacetimedb.com | sh -s -- --yes
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: module
+      - run: bun run test
+      - run: bun run --cwd web build
+      - name: Start SpacetimeDB
+        run: |
+          spacetime start --listen-addr 127.0.0.1:3000 > "$RUNNER_TEMP/stdb.log" 2>&1 &
+          for i in $(seq 30); do spacetime server ping local && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/stdb.log"; exit 1
+      - run: bun run test:e2e
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install SpacetimeDB CLI
+        run: |
+          curl -sSf https://install.spacetimedb.com | sh -s -- --yes
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: bun install --frozen-lockfile
+        working-directory: module
+      # Must be the token of the identity that first published the database (it owns it and is its admin).
+      - run: spacetime login --token "${{ secrets.SPACETIME_TOKEN }}"
+      - run: make deploy DEPLOY_DB="${{ vars.SPACETIME_DB || 'topics' }}"

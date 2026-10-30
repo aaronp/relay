@@ -3,8 +3,11 @@ LISTEN ?= 127.0.0.1:3010
 SERVER ?= local
 DB     ?= topics
 UI_PORT ?= 5173
+# Where `make deploy` publishes.
+DEPLOY_SERVER ?= maincloud
+DEPLOY_DB     ?= topics
 
-.PHONY: dev stop dev-status build ui auth-off auth-on
+.PHONY: dev stop dev-status build ui auth-off auth-on deploy
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
@@ -48,3 +51,8 @@ auth-off:
 ## Turn auth back on (drops all sessions; clients reconnect with a token).
 auth-on:
 	spacetime call -s $(SERVER) $(DB) set_auth_disabled false
+
+## Publish the module to $(DEPLOY_DB) on $(DEPLOY_SERVER) (needs `spacetime login`). Keeps data; refuses
+## migrations that would delete it. A first deploy also needs set_config (see README).
+deploy:
+	spacetime publish -s $(DEPLOY_SERVER) $(DEPLOY_DB) --module-path module -y

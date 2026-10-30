@@ -107,10 +107,25 @@ bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 m
 ## Deploy to maincloud
 
 ```sh
-spacetime publish -s maincloud topics --module-path module -y
+make deploy                       # = spacetime publish -s maincloud topics --module-path module -y
 spacetime call -s maincloud topics set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:7863", "https://<your web app origin>"]'
 ```
+
+`set_config` is only needed after the first deploy. Later deploys keep the data and config. A schema change
+that would delete data is refused instead of applied. To deploy somewhere else, use
+`make deploy DEPLOY_SERVER=… DEPLOY_DB=…`.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request. It runs the unit tests and builds the web UI, then
+starts a local SpacetimeDB and runs the e2e tests. If everything passes on a push to `master`, it runs
+`make deploy` against maincloud.
+
+Before the first CI deploy, set up the GitHub repo:
+- **Secret `SPACETIME_TOKEN`:** the token from `spacetime login show --token`. Use the identity that first
+  published the database, because it owns the database and is its admin.
+- **Variable `SPACETIME_DB`** (optional): the database name. The default is `topics`.
 
 Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db topics --issuer https://oauth.kerits.id`).
 
