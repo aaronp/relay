@@ -27,12 +27,12 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 ```sh
 bun install
 spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server entry
-spacetime publish -s local relay --module-path module -y
+spacetime publish -s local aaronp-relay --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
+spacetime call -s local aaronp-relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["topics-dev"]'
 
-export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=relay
+export TOPICS_SERVER=ws://127.0.0.1:3010 TOPICS_DB=aaronp-relay
 export TOPICS_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
 alias chat='bun cli/src/main.ts'
 
@@ -60,8 +60,8 @@ server errors are shown word for word.
 
 ```sh
 make dev                                              # SpacetimeDB on 127.0.0.1:3010
-spacetime publish -s local relay --module-path module -y
-spacetime call -s local relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+spacetime publish -s local aaronp-relay --module-path module -y
+spacetime call -s local aaronp-relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:5173"]'
 make ui                                               # then open http://127.0.0.1:5173 (not localhost)
 ```
@@ -79,12 +79,12 @@ make ui                                               # then open http://127.0.0
 ### Hosted on GitHub Pages
 
 CI's `pages` job publishes the UI to https://aaronp.github.io/relay/ after every passing push to `master`.
-There it connects to `wss://maincloud.spacetimedb.com` and the `relay` database by default.
+There it connects to `wss://maincloud.spacetimedb.com` and the `aaronp-relay` database by default.
 
 One-time setup:
 - In the repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
 - Add the Pages origin to the deployed database's audiences:
-  `spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs '["http://127.0.0.1:7863", "https://aaronp.github.io"]'`
+  `spacetime call -s maincloud aaronp-relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs '["http://127.0.0.1:7863", "https://aaronp.github.io"]'`
 
 On the hosted page:
 - The kerits client id is `https://aaronp.github.io`, and the redirect is `/relay/callback`. Pages serves the
@@ -98,8 +98,8 @@ On the hosted page:
 To try groups and topics without any tokens or SAIDs, switch auth off for one database:
 
 ```sh
-make auth-off                  # = spacetime call -s local relay set_auth_disabled true (admin only)
-TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db relay   # or --no-auth
+make auth-off                  # = spacetime call -s local aaronp-relay set_auth_disabled true (admin only)
+TOPICS_NO_AUTH=1 chat group create --name test --server ws://127.0.0.1:3010 --db aaronp-relay   # or --no-auth
 make auth-on                   # back on; drops every session, so clients reconnect with a token
 ```
 
@@ -123,16 +123,16 @@ bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 m
 ## Deploy to maincloud
 
 ```sh
-make deploy                       # = spacetime publish -s maincloud relay --module-path module -y
-spacetime call -s maincloud relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+make deploy                       # = spacetime publish -s maincloud aaronp-relay --module-path module -y
+spacetime call -s maincloud aaronp-relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:7863", "https://<your web app origin>"]'
 ```
 
-`set_config` is only needed after the first deploy. Later deploys keep the data and config. A schema change
+Maincloud database names are shared by everyone, so the default is `aaronp-relay` (`relay` belongs to someone else). `set_config` is only needed after the first deploy. Later deploys keep the data and config. A schema change
 that would delete data is refused instead of applied. To deploy somewhere else, use
 `make deploy DEPLOY_SERVER=… DEPLOY_DB=…`.
 
-To undeploy, run `make undeploy`. It runs `spacetime delete -s maincloud relay`, which deletes the database
+To undeploy, run `make undeploy`. It runs `spacetime delete -s maincloud aaronp-relay`, which deletes the database
 and all of its data, and asks you to confirm first. If CI deploys still run on `master`, the next one creates
 the database again, empty. To stop that, disable the workflow or remove the `SPACETIME_TOKEN` secret.
 
@@ -148,9 +148,9 @@ Before the first CI deploy, set up the GitHub repo:
   `spacetime login show --token | awk '/auth token/ {printf "%s", $NF}' | gh secret set SPACETIME_TOKEN`.
   Use the identity that first
   published the database, because it owns the database and is its admin.
-- **Variable `SPACETIME_DB`** (optional): the database name. The default is `relay`.
+- **Variable `SPACETIME_DB`** (optional): the database name. The default is `aaronp-relay`.
 
-Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db relay --issuer https://oauth.kerits.id`).
+Then `chat auth` (defaults: `--server wss://maincloud.spacetimedb.com --db aaronp-relay --issuer https://oauth.kerits.id`).
 
 ## CLI auth
 
@@ -171,7 +171,7 @@ import { connect } from '@topics/client';
 
 const client = await connect({
   uri: 'wss://maincloud.spacetimedb.com',
-  db: 'relay',
+  db: 'aaronp-relay',
   token,                                     // kerits JWT
   onExpired: async () => getFreshToken(),    // optional; return undefined to stop
 });

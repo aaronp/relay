@@ -46,7 +46,7 @@ jobs:
         working-directory: module
       # Must be the token of the identity that first published the database (it owns it and is its admin).
       - run: spacetime login --token "${{ secrets.SPACETIME_TOKEN }}"
-      - run: make deploy DEPLOY_DB="${{ vars.SPACETIME_DB || 'relay' }}"
+      - run: make deploy DEPLOY_DB="${{ vars.SPACETIME_DB || 'aaronp-relay' }}"
 
   # The web reference UI, at https://<owner>.github.io/<repo>/ (Settings → Pages → Source: GitHub Actions).
   pages:

@@ -20,7 +20,7 @@ const PENDING = 'topics-web-pending';
 const DEFAULTS: Settings = {
   walletUrl: 'https://oauth.kerits.id',
   server: DEV ? 'ws://127.0.0.1:3010' : 'wss://maincloud.spacetimedb.com',
-  db: 'relay',
+  db: 'aaronp-relay',
 };
 
 type Stored = { settings?: Partial<Settings>; tokens?: Tokens | null };
