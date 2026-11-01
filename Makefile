@@ -66,7 +66,7 @@ undeploy:
 show-token:
 	@spacetime login show --token | awk '/auth token/ {printf "%s", $$NF}'
 
-## Bump the client and CLI to the next version together. Commit and push to master to release it.
+## Bump the client and CLI to the next version together. Commit it, then run `make publish` to release it.
 bump-major bump-minor bump-patch:
 	@for pkg in client cli; do ( cd $$pkg && bun pm version $(@:bump-%=%) --no-git-tag-version ); done
 

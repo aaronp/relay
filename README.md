@@ -145,20 +145,9 @@ the database again, empty. To stop that, disable the workflow or remove the `SPA
 
 `.github/workflows/ci.yml` runs on every push and pull request. It runs the unit tests and builds the web UI, then
 starts a local SpacetimeDB and runs the e2e tests. If everything passes on a push to `master`, it runs
-`make deploy` against maincloud, then `make publish` to release the client and CLI to npm.
-
-To release, run `make bump-patch`, `make bump-minor` or `make bump-major`, then commit and push to `master`. The
-client and CLI share a version. `make publish` skips any version that's already on npm, so other pushes release
-nothing. When iterating on an app alongside this repo, skip the release with `bun link` (run `bun run build` in
-`client/` after each change, because Vite loads `dist`).
-
-The published CLI runs on Bun: `bun install -g @pritzlaff/relay-cli`, then `relay --help`. `relay --version` prints
-the version and the git SHA it was built from. At a terminal, it also checks npm at most once a day and says when
-a newer version is out (`RELAY_NO_UPDATE_CHECK=1` turns this off).
+`make deploy` against maincloud. CI doesn't publish to npm; see [Release to npm](#release-to-npm).
 
 Before the first CI deploy, set up the GitHub repo:
-- **Secret `NPM_TOKEN`:** a granular npm access token with write access to the `@pritzlaff` scope. It must be able
-  to publish without 2FA prompts. Set it with `gh secret set NPM_TOKEN`.
 - **Secret `SPACETIME_TOKEN`:** just the token, not the whole output of `spacetime login show --token`.
   Set it with
   `make -s show-token | gh secret set SPACETIME_TOKEN`.
@@ -167,6 +156,23 @@ Before the first CI deploy, set up the GitHub repo:
 - **Variable `SPACETIME_DB`** (optional): the database name. The default is `aaronp-relay`.
 
 Then `relay auth` (defaults: `--server wss://maincloud.spacetimedb.com --db aaronp-relay --issuer https://oauth.kerits.id`).
+
+## Release to npm
+
+Releases run from your machine. The client and CLI share a version.
+
+```sh
+make bump-patch      # or bump-minor, bump-major
+git commit -am "release x.y.z"
+export NPM_TOKEN=... # a granular npm access token with write access to the @pritzlaff scope
+make publish         # skips any version that's already on npm
+```
+
+Commit before publishing, because `relay --version` reports the commit the build came from. If the client's
+schema changed, `make deploy` first (or let CI deploy it), so a release never gets ahead of the live module.
+
+When iterating on an app alongside this repo, skip the release with `bun link` (run `bun run build` in `client/`
+after each change, because Vite loads `dist`).
 
 ## CLI auth
 
@@ -182,7 +188,9 @@ The CLI uses whichever of `id_token` / `access_token` carries `kerits.policySAID
 
 ## CLI
 
-The CLI runs on [Bun](https://bun.sh).
+The CLI runs on [Bun](https://bun.sh). `relay --version` prints the version and the git SHA it was built from. At
+a terminal, the CLI also checks npm at most once a day and says when a newer version is out
+(`RELAY_NO_UPDATE_CHECK=1` turns this off).
 
 ```sh
 bun install -g @pritzlaff/relay-cli
@@ -197,7 +205,11 @@ relay topic list --group demo
 relay send --topic demo.news -m "hello"
 relay pull --topic demo.news            # read what's there, then exit
 relay pull --topic demo.news --watch    # keep streaming new messages (Ctrl-C to stop)
+relay pull --topic demo.news --after 42 # only messages after id 42 (--json shows ids); also works with --watch
+relay topic delete --name news --group demo
 ```
+
+`relay topic create` also accepts a `"delete-policy"` in `--permissions`.
 
 ## Library
 
@@ -205,11 +217,7 @@ relay pull --topic demo.news --watch    # keep streaming new messages (Ctrl-C to
 bun add @pritzlaff/relay-client        # or: npm install @pritzlaff/relay-client
 ```
 
-relay pull --topic demo.news --after 42 # only messages after id 42 (--json shows ids); also works with --watch
-relay topic delete --name news --group demo
 To try the script below, run a local server with auth disabled, from a checkout of this repo:
-
-`relay topic create` also accepts a `"delete-policy"` in `--permissions`.
 
 ```sh
 make dev                                                          # in one terminal
@@ -284,14 +292,6 @@ const client = await connect({
 console.log(await client.closed);            // resolves when the client stops: 'expired' | 'closed'
 ```
 
-In a TypeScript project, use `"moduleResolution": "bundler"` and leave `noUncheckedIndexedAccess` off, because the
-package's types are its TypeScript source. Vite 5's default build target rejects top-level `await`, so in a Vite
-app call `connect()` inside a function or set `build.target` to `esnext`.
-
-The library sends the JWT directly, not through the SDK's token exchange, because that exchange rewrites
-`exp` and the module needs the real expiry. In Bun and Node (22 or later, which have a global WebSocket)
-it goes in an `Authorization` header. Browsers can't set websocket headers, so there it goes in `?token=`
-on the URL, where proxies may log it.
 ### Following several topics
 
 `client.stream()` follows a set of topics you can change at any time, over the client's one connection. Each
@@ -320,6 +320,14 @@ await client.deleteTopic('demo.news');       // needs a delete policy, or be the
   subscription. Create a topic before adding it.
 - `client.watch(addr, onMessage, onError, { from })` is the single-topic version, with the same behaviour.
 
+In a TypeScript project, use `"moduleResolution": "bundler"` and leave `noUncheckedIndexedAccess` off, because the
+package's types are its TypeScript source. Vite 5's default build target rejects top-level `await`, so in a Vite
+app call `connect()` inside a function or set `build.target` to `esnext`.
+
+The library sends the JWT directly, not through the SDK's token exchange, because that exchange rewrites
+`exp` and the module needs the real expiry. In Bun and Node (22 or later, which have a global WebSocket)
+it goes in an `Authorization` header. Browsers can't set websocket headers, so there it goes in `?token=`
+on the URL, where proxies may log it.
 
 ## Known issues
 
@@ -335,11 +343,11 @@ await client.deleteTopic('demo.news');       // needs a delete policy, or be the
    because it checks `exp` itself.
 5. Reads go through one `my_messages` view that recomputes on change (SpacetimeDB 2.12 TypeScript views
    take no parameters), and `pull` paging happens on the client. Fine for chat-sized topics.
+6. `from: 'now'` downloads the topic's history to find its end, then discards it. A numeric `from` filters on
+   the server, so prefer it when you have a saved id.
 
 ## Still to verify against real kerits
 
 Run `relay auth` once with a real wallet against a database configured for `https://oauth.kerits.id`.
 Decode the stored token and confirm the policy claim's exact key, and whether it's on the ID token or the
 access token.
-6. `from: 'now'` downloads the topic's history to find its end, then discards it. A numeric `from` filters on
-   the server, so prefer it when you have a saved id.
