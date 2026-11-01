@@ -18,6 +18,11 @@ export function parsePermissions(json: string, keys: string[]): Record<string, s
   return out;
 }
 
+export function parseAfter(s: string): bigint {
+  if (!/^\d+$/.test(s)) throw new Error(`invalid --after "${s}" (expected a message id)`);
+  return BigInt(s);
+}
+
 export function parseTopicAddr(s: string): string {
   if (!parseAddress(s)) throw new Error(`invalid topic "${s}" (expected group.topic, lowercase a-z 0-9 _ -)`);
   return s;
