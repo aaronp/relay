@@ -1,6 +1,7 @@
 import { DbConnection } from './bindings';
 import { decodeExp } from './jwt';
 import { directTokenSocket } from './ws';
+import { topicAccess } from './access';
 
 export { decodeClaims, decodeExp } from './jwt';
 export * from './oauth';
@@ -23,6 +24,7 @@ export type TopicInfo = {
   owner: string;
   readPolicies: string[];
   writePolicies: string[];
+  deletePolicies: string[];
   expiresAt?: Date;
 };
 
@@ -41,9 +43,26 @@ type MessageRow = {
   sentAt: { microsSinceUnixEpoch: bigint }; sender: string; digest: string; payload: Uint8Array;
 };
 
+/** Where to start: the beginning (default), new messages only ('now'), or after a message id you saved. */
+export type WatchOptions = { from?: 'now' | bigint };
+
+/** A changeable set of topics delivered through one callback, on the client's one connection. */
+export type TopicStream = {
+  /** Adding a topic already in the set does nothing. */
+  add(addr: string, opts?: WatchOptions): void;
+  remove(addr: string): void;
+  /** The topics currently in the set. */
+  readonly topics: string[];
+  close(): void;
+};
+
 type Watch = {
   addr: string; onMessage: (e: Envelope) => void; onError?: (err: Error) => void;
-  seen: Set<bigint>; stop?: () => void;
+  /** Highest message id handled; anything at or below it is skipped. */
+  cursor: bigint;
+  /** from: 'now' until the first subscription applies; a later resubscribe must not skip what it missed. */
+  skipHistory: boolean;
+  stop?: () => void;
 };
 
 const sqlString = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -105,14 +124,20 @@ export class Client {
 
   createTopic(
     addr: string,
-    opts: { readPolicies: string[]; writePolicies: string[]; lifetimeSecs?: number }
+    opts: { readPolicies: string[]; writePolicies: string[]; deletePolicies?: string[]; lifetimeSecs?: number }
   ): Promise<void> {
     return this.#call(() => this.conn.reducers.createTopic({
       address: addr,
       readPolicies: opts.readPolicies,
       writePolicies: opts.writePolicies,
       lifetimeSecs: opts.lifetimeSecs === undefined ? undefined : BigInt(opts.lifetimeSecs),
+      deletePolicies: opts.deletePolicies ?? [],
     }));
+  }
+
+  /** Removes the topic and its messages. Needs one of its deletePolicies, or to be its owner. */
+  deleteTopic(addr: string): Promise<void> {
+    return this.#call(() => this.conn.reducers.deleteTopic({ address: addr }));
   }
 
   send(addr: string, payload: Uint8Array): Promise<void> {
@@ -129,6 +154,7 @@ export class Client {
       owner: t.owner,
       readPolicies: t.readPolicies,
       writePolicies: t.writePolicies,
+      deletePolicies: t.deletePolicies,
       expiresAt: t.expiresAt ? toDate(t.expiresAt) : undefined,
     }));
   }
@@ -152,14 +178,39 @@ export class Client {
   }
 
   /**
-   * Existing messages first, then each new one. Survives token refresh. Returns an unsubscribe function.
-   * onError: unknown topic or failed subscription (the watch stops).
+   * Existing messages in id order (see opts.from), then each new one. Survives token refresh without gaps or
+   * repeats. Returns an unsubscribe function.
+   * onError: unknown or unreadable topic, topic deleted or expired, or failed subscription (the watch stops).
    */
-  watch(addr: string, onMessage: (e: Envelope) => void, onError?: (err: Error) => void): () => void {
-    const w: Watch = { addr, onMessage, onError, seen: new Set() };
+  watch(
+    addr: string,
+    onMessage: (e: Envelope) => void,
+    onError?: (err: Error) => void,
+    opts: WatchOptions = {}
+  ): () => void {
+    const w: Watch = {
+      addr, onMessage, onError,
+      cursor: typeof opts.from === 'bigint' ? opts.from : 0n, // ids start at 1
+      skipHistory: opts.from === 'now',
+    };
     this.#watches.add(w);
     void this.#subscribeWatch(w);
     return () => { this.#watches.delete(w); w.stop?.(); };
+  }
+
+  /** Follow a set of topics you can change at any time. Envelopes carry their group and topic. */
+  stream(onMessage: (e: Envelope) => void, onError?: (err: Error, addr: string) => void): TopicStream {
+    const stops = new Map<string, () => void>();
+    const remove = (addr: string) => { stops.get(addr)?.(); stops.delete(addr); };
+    return {
+      add: (addr, opts) => {
+        if (stops.has(addr)) return;
+        stops.set(addr, this.watch(addr, onMessage, err => { stops.delete(addr); onError?.(err, addr); }, opts));
+      },
+      remove,
+      get topics() { return [...stops.keys()]; },
+      close: () => { for (const addr of [...stops.keys()]) remove(addr); },
+    };
   }
 
   close() {
@@ -195,19 +246,59 @@ export class Client {
       w.onError?.(e instanceof Error ? e : new Error(String(e)));
     };
     let id: bigint;
-    try { id = await this.#requireTopicId(w.addr); } catch (e) { return fail(e); }
+    try { id = await this.#readableTopicId(w.addr); } catch (e) { return fail(e); }
     if (!this.#watches.has(w)) return;
     const conn = this.conn;
-    const onInsert = (_ctx: unknown, m: MessageRow) => {
-      if (m.topicId !== id || w.seen.has(m.id)) return;
-      w.seen.add(m.id);
+    let live = false;
+    let stopped = false;
+    const removed = () => fail(new Error(`topic ${w.addr} was removed`));
+    const deliver = (m: MessageRow) => {
+      if (stopped || m.id <= w.cursor) return;
+      w.cursor = m.id;
       w.onMessage(toEnvelope(m));
     };
+    const onInsert = (_ctx: unknown, m: MessageRow) => { if (live && m.topicId === id) deliver(m); };
+    // Before `live`, a delete can just be the access check's own subscription letting go of this row.
+    const onTopicDelete = (_ctx: unknown, t: { id: bigint }) => { if (live && t.id === id) removed(); };
     conn.db.myMessages.onInsert(onInsert);
+    conn.db.topic.onDelete(onTopicDelete);
+    const after = w.cursor > 0n ? ` AND id > ${w.cursor}` : '';
     const handle = conn.subscriptionBuilder()
+      .onApplied(() => {
+        if (stopped) return handle.unsubscribe();
+        if (!conn.db.topic.id.find(id)) return removed(); // deleted after the access check
+        // ponytail: from 'now' downloads the topic's history to find its end; add a server-side tail if topics get large.
+        // Read the cache, not inserts: rows another subscription already holds fire no insert.
+        const rows = [...conn.db.myMessages.iter()].filter(m => m.topicId === id).sort((a, b) => (a.id < b.id ? -1 : 1));
+        if (w.skipHistory) w.cursor = rows.at(-1)?.id ?? w.cursor;
+        else rows.forEach(deliver);
+        w.skipHistory = false;
+        live = true;
+      })
       .onError(ctx => fail(ctx.event ?? new Error('subscription failed')))
-      .subscribe(`SELECT * FROM my_messages WHERE topic_id = ${id}`);
-    w.stop = () => { conn.db.myMessages.removeOnInsert(onInsert); if (handle.isActive()) handle.unsubscribe(); };
+      .subscribe([`SELECT * FROM my_messages WHERE topic_id = ${id}${after}`, `SELECT * FROM topic WHERE id = ${id}`]);
+    w.stop = () => {
+      stopped = true;
+      conn.db.myMessages.removeOnInsert(onInsert);
+      conn.db.topic.removeOnDelete(onTopicDelete);
+      if (handle.isActive()) handle.unsubscribe();
+    };
+  }
+
+  /** The topic's id, or throws if it doesn't exist or you can't read it. The server enforces this regardless. */
+  async #readableTopicId(addr: string): Promise<bigint> {
+    const { topic, session, authOff } = await this.#snapshot(
+      [`SELECT * FROM topic WHERE address = ${sqlString(addr)}`, 'SELECT * FROM my_session', 'SELECT * FROM auth_mode'],
+      () => ({
+        topic: [...this.conn.db.topic.iter()].find(t => t.address === addr),
+        session: [...this.conn.db.mySession.iter()][0],
+        authOff: !!this.conn.db.authMode.id.find(0)?.disabled,
+      })
+    );
+    if (!topic) throw new Error(`no such topic ${addr}`);
+    const canRead = authOff || (session && topicAccess({ sub: session.subject, saids: session.policySaids }, topic).read);
+    if (!canRead) throw new Error(`no read access to ${addr}`);
+    return topic.id;
   }
 
   async #requireTopicId(addr: string): Promise<bigint> {
@@ -218,12 +309,12 @@ export class Client {
   }
 
   /** Subscribe, read the applied rows, unsubscribe. */
-  #snapshot<T>(sql: string, read: () => T): Promise<T> {
+  #snapshot<T>(sql: string | string[], read: () => T): Promise<T> {
     return this.#call(() => new Promise((resolve, reject) => {
       const handle = this.conn.subscriptionBuilder()
         .onApplied(() => { const rows = read(); handle.unsubscribe(); resolve(rows); })
         .onError(ctx => reject(ctx.event ?? new Error('subscription failed')))
-        .subscribe(sql);
+        .subscribe([sql].flat());
     }));
   }
 

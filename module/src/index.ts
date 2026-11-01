@@ -58,6 +58,8 @@ const topic = table(
     writePolicies: t.array(t.string()),
     createdAt: t.timestamp(),
     expiresAt: t.option(t.timestamp()),
+    // Last, with a default: lets the auto-migration add it, making existing topics owner-only to delete.
+    deletePolicies: t.array(t.string()).default([]),
   }
 );
 
@@ -116,7 +118,7 @@ function callerClaims(ctx: Ctx) {
   return { sub: jwt.subject, saids: readPolicySaids(jwt.fullPayload, cfg.policyClaim), expiresAt };
 }
 
-type Action = 'create_group' | 'create_topic' | 'send';
+type Action = 'create_group' | 'create_topic' | 'send' | 'delete_topic';
 
 /** Single gate for every write. */
 // ponytail: policy match only; rate limits / quotas per subject go here when needed.
@@ -129,6 +131,11 @@ function authorize(ctx: Ctx, action: Action, target: { required: string[]; owner
 
 function requireName(name: string) {
   if (!validName(name)) throw new SenderError(`invalid name "${name}"`);
+}
+
+function dropTopic(ctx: Ctx, id: bigint) {
+  for (const m of [...ctx.db.message.topicId.filter(id)]) ctx.db.message.id.delete(m.id);
+  ctx.db.topic.id.delete(id);
 }
 
 export const init = spacetimedb.init(ctx => {
@@ -149,9 +156,7 @@ export const sweep = spacetimedb.reducer({ onSchedule: sweepTimer }, { timer: sw
   for (const s of [...ctx.db.session.iter()])
     if (s.expiresAt.microsSinceUnixEpoch <= now) ctx.db.session.identity.delete(s.identity);
   for (const tp of [...ctx.db.topic.iter()]) {
-    if (!tp.expiresAt || tp.expiresAt.microsSinceUnixEpoch > now) continue;
-    for (const m of [...ctx.db.message.topicId.filter(tp.id)]) ctx.db.message.id.delete(m.id);
-    ctx.db.topic.id.delete(tp.id);
+    if (tp.expiresAt && tp.expiresAt.microsSinceUnixEpoch <= now) dropTopic(ctx, tp.id);
   }
 });
 
@@ -203,8 +208,9 @@ export const createTopic = spacetimedb.reducer(
     readPolicies: t.array(t.string()),
     writePolicies: t.array(t.string()),
     lifetimeSecs: t.option(t.u64()),
+    deletePolicies: t.array(t.string()),
   },
-  (ctx, { address, readPolicies, writePolicies, lifetimeSecs }) => {
+  (ctx, { address, readPolicies, writePolicies, lifetimeSecs, deletePolicies }) => {
     const addr = parseAddress(address);
     if (!addr) throw new SenderError(`invalid name "${address}"`);
     const g = ctx.db.group.name.find(addr.group);
@@ -223,9 +229,17 @@ export const createTopic = spacetimedb.reducer(
       expiresAt: lifetimeSecs === undefined
         ? undefined
         : new Timestamp(ctx.timestamp.microsSinceUnixEpoch + lifetimeSecs * 1_000_000n),
+      deletePolicies,
     });
   }
 );
+
+export const deleteTopic = spacetimedb.reducer({ address: t.string() }, (ctx, { address }) => {
+  const tp = ctx.db.topic.address.find(address);
+  if (!tp) throw new SenderError(`no such topic ${address}`);
+  authorize(ctx, 'delete_topic', { required: tp.deletePolicies, owner: tp.owner });
+  dropTopic(ctx, tp.id);
+});
 
 export const send = spacetimedb.reducer(
   { address: t.string(), payload: t.array(t.u8()) },

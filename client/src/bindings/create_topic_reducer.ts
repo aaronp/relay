@@ -15,4 +15,5 @@ export default {
   readPolicies: __t.array(__t.string()),
   writePolicies: __t.array(__t.string()),
   lifetimeSecs: __t.option(__t.u64()),
+  deletePolicies: __t.array(__t.string()),
 };

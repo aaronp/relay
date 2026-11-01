@@ -76,6 +76,7 @@ export const Topic = __t.object("Topic", {
   writePolicies: __t.array(__t.string()),
   createdAt: __t.timestamp(),
   expiresAt: __t.option(__t.timestamp()),
+  deletePolicies: __t.array(__t.string()),
 });
 export type Topic = __Infer<typeof Topic>;
 

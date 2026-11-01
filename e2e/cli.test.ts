@@ -39,6 +39,40 @@ test('group create, topic create, list, send, pull', async () => {
   expect(atob(json.payload)).toBe('hello world');
 });
 
+test('pull --after resumes from an id, and topic delete honours delete-policy', async () => {
+  const tok = await env.tokenFor('bob', ['ONBOARDED']);
+  const ok = async (...a: string[]) => {
+    const r = await relay(tok, ...a);
+    expect(r.stderr).toBe('');
+    expect(r.code).toBe(0);
+    return r.stdout;
+  };
+  await ok('group', 'create', '--name', 'del');
+  await ok('topic', 'create', '--name', 't', '--group', 'del', '--permissions', '{"delete-policy":"DEL"}');
+  expect(await ok('topic', 'list', '--group', 'del')).toContain('delete=DEL');
+  await ok('send', '--topic', 'del.t', '-m', 'one');
+  await ok('send', '--topic', 'del.t', '-m', 'two');
+
+  const first = JSON.parse((await ok('pull', '--topic', 'del.t', '--json')).trim().split('\n')[0]);
+  const after = await ok('pull', '--topic', 'del.t', '--after', first.id);
+  expect(after).toContain('two');
+  expect(after).not.toContain('one');
+  const bad = await relay(tok, 'pull', '--topic', 'del.t', '--after', 'soon');
+  expect(bad.code).toBe(1);
+  expect(bad.stderr).toContain('invalid --after "soon"');
+
+  const denied = await relay(await env.tokenFor('mallory', []), 'topic', 'delete', '--name', 't', '--group', 'del');
+  expect(denied.code).toBe(1);
+  expect(denied.stderr).toContain('delete_topic requires one of [DEL]');
+
+  await (async () => {
+    const r = await relay(await env.tokenFor('deleter', ['DEL']), 'topic', 'delete', '--name', 't', '--group', 'del');
+    expect(r.stderr).toBe('');
+    expect(r.code).toBe(0);
+  })();
+  expect(await ok('topic', 'list', '--group', 'del')).toBe('');
+});
+
 test('server error goes to stderr with exit 1', async () => {
   const r = await relay(await env.tokenFor('mallory', []), 'group', 'create', '--name', 'nope', '--permissions', '{}');
   expect(r.code).toBe(1);

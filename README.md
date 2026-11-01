@@ -23,6 +23,7 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 - **create group**: the token must carry `config.createGroupPolicy` (e.g. your `onboarded` SAID). Until `set_config` sets it, nobody can create groups.
 - **create topic in a group**: the token must carry one of the group's `createTopicPolicies`.
 - **read / write a topic**: the token must carry one of the topic's `readPolicies` / `writePolicies`.
+- **delete a topic**: the token must carry one of the topic's `deletePolicies`. Deleting also removes its messages.
 - Owners (same `sub`) always pass on their own group or topic. Lists are any-of. An empty list means owner only.
 - Group/topic names: `^[a-z0-9][a-z0-9_-]{0,63}$`; topics are addressed `group.topic`. Max payload is 64 KiB.
 
@@ -204,7 +205,11 @@ relay pull --topic demo.news --watch    # keep streaming new messages (Ctrl-C to
 bun add @pritzlaff/relay-client        # or: npm install @pritzlaff/relay-client
 ```
 
+relay pull --topic demo.news --after 42 # only messages after id 42 (--json shows ids); also works with --watch
+relay topic delete --name news --group demo
 To try the script below, run a local server with auth disabled, from a checkout of this repo:
+
+`relay topic create` also accepts a `"delete-policy"` in `--permissions`.
 
 ```sh
 make dev                                                          # in one terminal
@@ -287,6 +292,34 @@ The library sends the JWT directly, not through the SDK's token exchange, becaus
 `exp` and the module needs the real expiry. In Bun and Node (22 or later, which have a global WebSocket)
 it goes in an `Authorization` header. Browsers can't set websocket headers, so there it goes in `?token=`
 on the URL, where proxies may log it.
+### Following several topics
+
+`client.stream()` follows a set of topics you can change at any time, over the client's one connection. Each
+message says which topic it came from (`msg.group`, `msg.topic`).
+
+```ts
+const stream = client.stream(
+  msg => console.log(`${msg.group}.${msg.topic}: ${decode(msg.payload)}`),
+  (err, addr) => console.error(addr, err.message),  // the topic has left the set
+);
+
+stream.add('demo.news');                     // from the beginning
+stream.add('demo.alerts', { from: 'now' });  // new messages only
+stream.add('demo.chat', { from: lastId });   // resume after a msg.id you saved
+stream.remove('demo.alerts');
+console.log(stream.topics);                  // ['demo.news', 'demo.chat']
+stream.close();
+
+await client.deleteTopic('demo.news');       // needs a delete policy, or be the owner
+```
+
+- Existing messages arrive in id order, then new ones as they're sent. Ids are shared across topics and always
+  increase. Token refresh resumes with no gaps or repeats.
+- Removing a topic and adding it again starts from whatever `from` you pass, so the default replays its history.
+- `onError` fires for a topic that doesn't exist, one you can't read, one that's deleted or expires, or a failed
+  subscription. Create a topic before adding it.
+- `client.watch(addr, onMessage, onError, { from })` is the single-topic version, with the same behaviour.
+
 
 ## Known issues
 
@@ -308,3 +341,5 @@ on the URL, where proxies may log it.
 Run `relay auth` once with a real wallet against a database configured for `https://oauth.kerits.id`.
 Decode the stored token and confirm the policy claim's exact key, and whether it's on the ID token or the
 access token.
+6. `from: 'now'` downloads the topic's history to find its end, then discards it. A numeric `from` filters on
+   the server, so prefer it when you have a saved id.

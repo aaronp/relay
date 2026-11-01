@@ -20,4 +20,5 @@ export default __t.row({
   writePolicies: __t.array(__t.string()).name("write_policies"),
   createdAt: __t.timestamp().name("created_at"),
   expiresAt: __t.option(__t.timestamp()).name("expires_at"),
+  deletePolicies: __t.array(__t.string()).name("delete_policies"),
 });

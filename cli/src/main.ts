@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'node:util';
 import { connect, decodeExp, setLogLevel, type Client, type Envelope } from '@pritzlaff/relay-client';
-import { displayText, parseLifetime, parsePermissions, parseTopicAddr } from './args';
+import { displayText, parseAfter, parseLifetime, parsePermissions, parseTopicAddr } from './args';
 import { login, refresh } from './auth';
 import { loadConfig, saveConfig, type Config } from './config';
 import { VERSION, checkForUpdate } from './version';
@@ -9,10 +9,11 @@ import { VERSION, checkForUpdate } from './version';
 const USAGE = `usage:
   relay auth
   relay group create --name <g> --permissions '{"create-topic-policy":"SAID"}'
-  relay topic create --name <t> --group <g> --permissions '{"read-policy":"SAID","write-policy":["SAID",...]}' [--lifetime 7d]
+  relay topic create --name <t> --group <g> --permissions '{"read-policy":"SAID","write-policy":["SAID",...],"delete-policy":"SAID"}' [--lifetime 7d]
   relay topic list --group <g>
+  relay topic delete --name <t> --group <g>
   relay send --topic <g.t> (-m <text> | --file <path>)
-  relay pull --topic <g.t> [--watch] [--json]
+  relay pull --topic <g.t> [--after <id>] [--watch] [--json]
 options: --server <ws(s)://...> --db <name> --issuer <url> --port <loopback port>
          --no-auth (or RELAY_NO_AUTH=1): no token; only works while the server has auth disabled
          -v, --version: print the version (RELAY_NO_UPDATE_CHECK=1 turns off the daily new-version check)`;
@@ -28,7 +29,7 @@ const { values: o, positionals: [cmd, sub] } = parseArgs({
     name: { type: 'string' }, group: { type: 'string' }, topic: { type: 'string' },
     permissions: { type: 'string' }, lifetime: { type: 'string' },
     message: { type: 'string', short: 'm' }, file: { type: 'string' },
-    watch: { type: 'boolean' }, json: { type: 'boolean' },
+    watch: { type: 'boolean' }, json: { type: 'boolean' }, after: { type: 'string' },
     server: { type: 'string' }, db: { type: 'string' }, issuer: { type: 'string' }, port: { type: 'string' },
     'no-auth': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
@@ -102,12 +103,17 @@ async function run(): Promise<number> {
         return 0;
       }
       case 'topic create': {
-        const p = parsePermissions(o.permissions ?? '{}', ['read-policy', 'write-policy']);
+        const p = parsePermissions(o.permissions ?? '{}', ['read-policy', 'write-policy', 'delete-policy']);
         await c.createTopic(parseTopicAddr(`${need(o.group, 'group')}.${need(o.name, 'name')}`), {
           readPolicies: p['read-policy'] ?? [],
           writePolicies: p['write-policy'] ?? [],
+          deletePolicies: p['delete-policy'] ?? [],
           lifetimeSecs: o.lifetime ? parseLifetime(o.lifetime) : undefined,
         });
+        return 0;
+      }
+      case 'topic delete': {
+        await c.deleteTopic(parseTopicAddr(`${need(o.group, 'group')}.${need(o.name, 'name')}`));
         return 0;
       }
       case 'topic list': {
@@ -115,7 +121,7 @@ async function run(): Promise<number> {
           console.log(o.json
             ? JSON.stringify(t)
             : `${t.address}\tread=${t.readPolicies.join(',')}\twrite=${t.writePolicies.join(',')}` +
-              `${t.expiresAt ? `\texpires=${t.expiresAt.toISOString()}` : ''}`);
+              `\tdelete=${t.deletePolicies.join(',')}${t.expiresAt ? `\texpires=${t.expiresAt.toISOString()}` : ''}`);
         return 0;
       }
       case 'send': {
@@ -127,12 +133,14 @@ async function run(): Promise<number> {
       }
       case 'pull': {
         const addr = parseTopicAddr(need(o.topic, 'topic'));
+        const after = o.after === undefined ? undefined : parseAfter(o.after);
         if (!o.watch) {
-          for (const e of await c.pull(addr)) printMessage(e, o.json);
+          for (const e of await c.pull(addr, { afterId: after })) printMessage(e, o.json);
           return 0;
         }
-        c.watch(addr, e => printMessage(e, o.json));
-        const why = await c.closed;
+        const failed = new Promise<never>((_, reject) =>
+          c.watch(addr, e => printMessage(e, o.json), reject, { from: after }));
+        const why = await Promise.race([c.closed, failed]);
         if (why === 'expired') throw new Error(EXPIRED);
         throw new Error('connection closed');
       }
