@@ -1,8 +1,8 @@
-// e2e precondition: `spacetime start --listen-addr 127.0.0.1:3010` is running (the CLI's `local` server).
+// e2e precondition: `spacetime start --listen-addr 127.0.0.1:3025` is running (the CLI's `relay-local` server; `make dev` adds it).
 import { startDevIssuer } from '../dev-issuer/src/issuer';
 
-export const URI = process.env.RELAY_TEST_URI ?? 'ws://127.0.0.1:3010';
-const SERVER = process.env.RELAY_TEST_SERVER ?? 'local';
+export const URI = process.env.RELAY_TEST_URI ?? 'ws://127.0.0.1:3025';
+const SERVER = process.env.RELAY_TEST_SERVER ?? 'relay-local';
 const ROOT = new URL('..', import.meta.url).pathname;
 
 // SpacetimeDB caches JWKS per issuer URL and the dev key is fresh per run, so use a fresh port per run.

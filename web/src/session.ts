@@ -19,7 +19,7 @@ const PENDING = 'relay-web-pending';
 
 const DEFAULTS: Settings = {
   walletUrl: 'https://oauth.kerits.id',
-  server: DEV ? 'ws://127.0.0.1:3010' : 'wss://maincloud.spacetimedb.com',
+  server: DEV ? 'ws://127.0.0.1:3025' : 'wss://maincloud.spacetimedb.com',
   db: 'aaronp-relay',
 };
 

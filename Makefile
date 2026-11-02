@@ -1,6 +1,6 @@
-# Local SpacetimeDB listens where the CLI's `local` server entry points (port 3000 is often taken).
-LISTEN ?= 127.0.0.1:3010
-SERVER ?= local
+# Local SpacetimeDB on its own port + CLI nickname so it doesn't clash with other local instances (3000/3010).
+LISTEN ?= 127.0.0.1:3025
+SERVER ?= relay-local
 DB     ?= aaronp-relay
 UI_PORT ?= 5173
 # Where `make deploy` publishes.
@@ -11,6 +11,7 @@ DEPLOY_DB     ?= aaronp-relay
 
 ## Start SpacetimeDB locally (foreground; Ctrl-C to stop).
 dev:
+	@spacetime server add --url http://$(LISTEN) $(SERVER) --no-fingerprint >/dev/null 2>&1 || true
 	spacetime start --listen-addr $(LISTEN)
 
 ## Stop local SpacetimeDB (port $(LISTEN)) and the web UI (port $(UI_PORT)) if they're running.

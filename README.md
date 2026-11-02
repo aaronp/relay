@@ -31,13 +31,14 @@ bytes in an envelope: `{ id, group, topic, sentAt, sender, digest, payload }`. T
 
 ```sh
 bun install
-spacetime start --listen-addr 127.0.0.1:3010        # the CLI's `local` server entry
-spacetime publish -s local aaronp-relay --module-path module -y
+spacetime server add --url http://127.0.0.1:3025 relay-local --no-fingerprint   # once
+spacetime start --listen-addr 127.0.0.1:3025
+spacetime publish -s relay-local aaronp-relay --module-path module -y
 
 bun dev-issuer/src/main.ts                          # prints http://127.0.0.1:7864 and a /mint URL
-spacetime call -s local aaronp-relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["relay-dev"]'
+spacetime call -s relay-local aaronp-relay set_config http://127.0.0.1:7864 ONBOARDED kerits.policySAIDs '["relay-dev"]'
 
-export RELAY_SERVER=ws://127.0.0.1:3010 RELAY_DB=aaronp-relay
+export RELAY_SERVER=ws://127.0.0.1:3025 RELAY_DB=aaronp-relay
 export RELAY_TOKEN=$(curl -s 'http://127.0.0.1:7864/mint?sub=alice&saids=ONBOARDED,ABC1235,XYZ,HKI&ttl=3600')
 alias relay='bun cli/src/main.ts'
 
@@ -64,9 +65,9 @@ and the selected topic's messages, send box and live stream on the right. Every 
 server errors are shown word for word.
 
 ```sh
-make dev                                              # SpacetimeDB on 127.0.0.1:3010
-spacetime publish -s local aaronp-relay --module-path module -y
-spacetime call -s local aaronp-relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
+make dev                                              # SpacetimeDB on 127.0.0.1:3025
+spacetime publish -s relay-local aaronp-relay --module-path module -y
+spacetime call -s relay-local aaronp-relay set_config https://oauth.kerits.id <onboarded SAID> kerits.policySAIDs \
   '["http://127.0.0.1:5173"]'
 make ui                                               # then open http://127.0.0.1:5173 (not localhost)
 ```
@@ -103,8 +104,8 @@ On the hosted page:
 To try groups and topics without any tokens or SAIDs, switch auth off for one database:
 
 ```sh
-make auth-off                  # = spacetime call -s local aaronp-relay set_auth_disabled true (admin only)
-RELAY_NO_AUTH=1 relay group create --name test --server ws://127.0.0.1:3010 --db aaronp-relay   # or --no-auth
+make auth-off                  # = spacetime call -s relay-local aaronp-relay set_auth_disabled true (admin only)
+RELAY_NO_AUTH=1 relay group create --name test --server ws://127.0.0.1:3025 --db aaronp-relay   # or --no-auth
 make auth-on                   # back on; drops every session, so clients reconnect with a token
 ```
 
@@ -122,7 +123,7 @@ Don't leave it off on maincloud.
 
 ```sh
 bun run test        # unit tests (+ client build and a browser-safety check)
-bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3010`; ~1 min (expiry tests wait for the sweep)
+bun run test:e2e    # needs `spacetime start --listen-addr 127.0.0.1:3025`; ~1 min (expiry tests wait for the sweep)
 ```
 
 ## Deploy to maincloud
@@ -197,7 +198,7 @@ bun install -g @pritzlaff/relay-cli
 relay --version
 
 # Point it at a server. These examples need auth disabled (see "Auth off"); otherwise run `relay auth` instead.
-export RELAY_SERVER=ws://127.0.0.1:3010 RELAY_DB=aaronp-relay RELAY_NO_AUTH=1
+export RELAY_SERVER=ws://127.0.0.1:3025 RELAY_DB=aaronp-relay RELAY_NO_AUTH=1
 
 relay group create --name demo
 relay topic create --name news --group demo --lifetime 7d
@@ -221,7 +222,7 @@ To try the script below, run a local server with auth disabled, from a checkout 
 
 ```sh
 make dev                                                          # in one terminal
-spacetime publish -s local aaronp-relay --module-path module -y   # in another
+spacetime publish -s relay-local aaronp-relay --module-path module -y   # in another
 make auth-off
 ```
 
@@ -232,7 +233,7 @@ run fails with an error unless you change the group name.
 import { connect } from '@pritzlaff/relay-client';
 
 const client = await connect({
-  uri: 'ws://127.0.0.1:3010',
+  uri: 'ws://127.0.0.1:3025',
   db: 'aaronp-relay',
   // token: '<kerits JWT>',    // leave out only while the server has auth disabled
 });
